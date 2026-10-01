@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>disclosegate — social preview</title>
+<!--
+  The source of a social preview card. Open it in a browser: what you see at 1280×640 is
+  the card. No PNG is committed yet (DG-23 in BACKLOG.md); when one is, it is rendered
+  from this file with headless Chrome, never drawn by hand.
+
+  The mark is assets/logo.svg itself, referenced by a relative path — not a copy — so
+  the card cannot drift from the favicon and the README. The colours are the site's dark
+  theme. The finding line is the real output shape, masked as the tool masks it.
+-->
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    background: #0e0f14;
+    color: #e8e9f0;
+    font: 400 17px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0 88px;
+    position: relative;
+    overflow: hidden;
+  }
+  body::after {
+    content: "";
+    position: absolute;
+    right: -220px;
+    bottom: -280px;
+    width: 720px;
+    height: 720px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(169, 173, 245, 0.13), transparent 62%);
+  }
+  header { display: flex; align-items: center; gap: 22px; margin-bottom: 34px; }
+  header img { width: 76px; height: 76px; border-radius: 17px; }
+  h1 { font-size: 62px; letter-spacing: -0.035em; font-weight: 650; line-height: 1; }
+  h1 span { color: #a9adf5; }
+  p.lede { font-size: 27px; line-height: 1.35; color: #9597a8; max-width: 560px; }
+  p.lede strong { color: #e8e9f0; font-weight: 600; }
+  .out {
+    position: absolute;
+    right: 88px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 470px;
+    background: #15161d;
+    border: 1px solid #2a2c38;
+    border-radius: 14px;
+    padding: 22px 24px;
+    font: 400 14px/1.9 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    color: #5f6170;
+  }
+  .out b { color: #e8e9f0; font-weight: 400; }
+  .out .refused { color: #a9adf5; display: block; margin-bottom: 8px; }
+  footer {
+    position: absolute;
+    left: 88px;
+    bottom: 54px;
+    font: 500 15px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    letter-spacing: 0.02em;
+    color: #5f6170;
+  }
+  footer span { color: #a9adf5; }
+</style>
+</head>
+<body>
+  <header>
+    <img src="logo.svg" alt="">
+    <h1>disclose<span>gate</span></h1>
+  </header>
+  <p class="lede">Internal detail stopped <strong>before the push</strong>, not after.</p>
+  <div class="out">
+    <span class="refused">2 findings in 1 of 3 commits — push refused</span>
+    <b>email</b>  4e1f0a2  author        bo… (20 chars)<br>
+    <b>term</b>   4e1f0a2  deploy.txt:2  ni… (13 chars)<br>
+    Nothing has left this machine.
+  </div>
+  <footer>git pre-push hook · <span>zero dependencies</span> · nothing sent anywhere</footer>
+</body>
+</html>

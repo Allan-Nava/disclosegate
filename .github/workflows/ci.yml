@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # `node >=18`, no dependencies. Run the check on the floor and on every later line
+  # without `npm install`, so both claims are tested rather than stated.
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [18, 20, 22, 24]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+
+  # The tool turned on its own history: every commit this repository has ever made,
+  # through the same rules a push would meet. With no user config on the runner only
+  # the path rule and .disclosegate.json apply — which is the public part, and the
+  # part a contributor's commit is most likely to break. Exit 1 on a finding.
+  own-history:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node bin/disclosegate.mjs scan --history
+      # And the hook protocol once by hand, on a scratch repository: a home path in an
+      # added line must refuse a real push into a bare remote.
+      - run: |
+          set -u
+          T="$RUNNER_TEMP/dg"; mkdir -p "$T"; git init -q --bare "$T/remote.git"; git init -q -b main "$T/work"
+          cd "$T/work"
+          git config user.name ci; git config user.email ci@example.com
+          git remote add origin "$T/remote.git"
+          node "$GITHUB_WORKSPACE/bin/disclosegate.mjs" install
+          printf '%s\n' "/home/$(whoami)/notes" > a.txt; git add a.txt; git commit -qm one
+          if git push -q origin main; then echo "the push should have been refused"; exit 1; fi
+          git -C "$T/remote.git" rev-parse --verify -q refs/heads/main && { echo "the ref reached the remote"; exit 1; }
+          echo "refused, as it should be"
+
+  pack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # What `npm publish` would actually ship.
+      - run: npm pack --dry-run
+
+  # BACKLOG.md is the single source of truth; ROADMAP.md is generated from it and the
+  # issues are synced from it. A stale roadmap fails here; the planner's decisions are
+  # asserted against a fixture, because a wrong decision opens duplicates or closes
+  # open work on a public repository.
+  backlog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: node scripts/backlog.mjs lint
+      - run: node scripts/backlog.mjs check
+      - run: node scripts/backlog_test.mjs

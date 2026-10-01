@@ -1,0 +1,43 @@
+{
+  "name": "disclosegate",
+  "version": "0.0.1",
+  "description": "A pre-push guard against publishing internal detail: work email addresses in commit metadata and trailers, private host, service and client names, home-directory paths and file URLs — checked before the push, because a commit on a forge stays reachable by SHA.",
+  "type": "module",
+  "bin": {
+    "disclosegate": "bin/disclosegate.mjs"
+  },
+  "files": [
+    "bin",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node bin/disclosegate.mjs check && node --test",
+    "backlog": "node scripts/backlog.mjs lint && node scripts/backlog.mjs check",
+    "build:site": "node site/build.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Allan-Nava/disclosegate"
+  },
+  "homepage": "https://allan-nava.github.io/disclosegate/",
+  "bugs": "https://github.com/Allan-Nava/disclosegate/issues",
+  "keywords": [
+    "git",
+    "pre-push",
+    "hook",
+    "privacy",
+    "leak-prevention",
+    "commit-metadata",
+    "open-source-hygiene"
+  ],
+  "author": "Allan Nava (https://github.com/Allan-Nava)",
+  "license": "MIT",
+  "devDependencies": {
+    "marked": "^17.0.0"
+  }
+}

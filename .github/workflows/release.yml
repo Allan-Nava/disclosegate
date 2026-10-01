@@ -1,0 +1,189 @@
+name: Release
+
+# Cut a release by pushing a tag:
+#
+#   npm test && git tag disclosegate--v0.1.0 && git push origin disclosegate--v0.1.0
+#
+# Everything after that happens here, with no npm token anywhere: the publish
+# authenticates through OIDC (npm Trusted Publishing), configured on the package
+# at npmjs.com against this repository and this workflow filename.
+#
+# DO NOT RENAME THIS FILE. The trusted publisher on npm is bound to the literal
+# name `release.yml`; rename it and the publish stops authenticating, with an
+# error that does not mention the filename.
+
+on:
+  push:
+    tags: ['disclosegate--v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release, e.g. disclosegate--v0.1.0'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write   # create the GitHub release
+      issues: write     # close the milestone
+      id-token: write   # OIDC: this is what authenticates the publish
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      # No `registry-url`. It looks like the obvious thing to set, and it is the
+      # reason this job could not publish: setup-node then writes an .npmrc
+      # holding `_authToken=${NODE_AUTH_TOKEN}` and exports NODE_AUTH_TOKEN as a
+      # placeholder. npm finds a credential configured for the registry, so it
+      # never performs the OIDC exchange — it publishes with the placeholder, and
+      # npm answers 404 rather than 401 so as not to reveal whether the package
+      # exists. Trusted publishing needs *no* credential in the environment;
+      # registry.npmjs.org is already npm's default registry.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # The tag is the source of truth for what is being released; package.json
+      # must agree, and `npm test` checks the CHANGELOG against package.json.
+      - name: Resolve and verify the version
+        id: v
+        run: |
+          TAG="${{ inputs.tag || github.ref_name }}"
+          TAG_VERSION="${TAG#disclosegate--v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag $TAG says $TAG_VERSION but package.json says $PKG_VERSION"
+            exit 1
+          fi
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          echo "version=$PKG_VERSION" >> "$GITHUB_OUTPUT"
+
+      # Trusted publishing needs npm >= 11.5.1 and Node 22 still bundles npm 10.
+      # Pinned on purpose: `npm@latest` would put a moving dependency in the
+      # publishing path, where a release can break because npm shipped last
+      # night. Bump this deliberately.
+      - name: Use an npm that speaks OIDC
+        run: |
+          npm install -g npm@11.19.0
+          npm --version
+
+      # --ignore-scripts: this job holds the OIDC publishing privilege, so no
+      # dependency lifecycle script runs beside it. The only dependency is
+      # `marked`, used by the site build, and it needs no scripts.
+      - run: npm install --no-audit --no-fund --ignore-scripts
+      - run: npm test
+
+      # No token: OIDC. Provenance is generated automatically for a public
+      # package published this way, so --provenance is not passed.
+      #
+      # Skipping an already-published version is what makes a bootstrap release
+      # work: npm forbids configuring a trusted publisher for a package that does
+      # not exist, so the very first version is published by hand, and this job
+      # still has to be able to cut its release and close its milestone.
+      - name: Publish to npm
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          if [ "$(npm view "disclosegate@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+            echo "::notice::disclosegate@$VERSION is already on the registry — skipping publish"
+            exit 0
+          fi
+          # Belt and braces: nothing should be able to authenticate this publish
+          # except OIDC, not even a token someone reintroduces into the env. Note
+          # that unsetting it is not enough on its own — an .npmrc naming the
+          # variable counts as a configured credential even when it expands to
+          # nothing, which is why setup-node above is given no registry-url.
+          unset NODE_AUTH_TOKEN
+          # Verbose on purpose: at the default level a refused OIDC exchange ends in a
+          # bare ENEEDAUTH (2026-09-22, 0.0.3). At verbose npm prints the token
+          # exchange with the registry and why it failed — a publisher it cannot
+          # find, a claim that does not match — which is the only clue there is.
+          npm publish --access public --loglevel verbose
+
+      # The registry takes a moment to serve a freshly published version — over a
+      # minute on 2026-09-18 (0.3.2), which the previous six 10-second tries did not
+      # cover. Twenty tries at 15 seconds: five minutes, and a rerun is cheap if the
+      # registry is slower still.
+      - name: Verify the published version
+        run: |
+          for i in $(seq 1 20); do
+            if [ "$(npm view "disclosegate@${{ steps.v.outputs.version }}" version 2>/dev/null)" = "${{ steps.v.outputs.version }}" ]; then
+              echo "disclosegate@${{ steps.v.outputs.version }} is live after $i tries"; exit 0
+            fi
+            echo "not visible yet, retrying…"; sleep 15
+          done
+          echo "::error::disclosegate@${{ steps.v.outputs.version }} did not appear on the registry"
+          exit 1
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.v.outputs.tag }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          # Rerun-safe, like the publish step: a rerun that already got this far
+          # would otherwise die here on "release already exists".
+          if gh release view "$TAG" --json id --jq .id >/dev/null 2>&1; then
+            echo "::notice::release $TAG already exists — leaving it as it is"
+            exit 0
+          fi
+          # The notes open with this version's CHANGELOG section — a Breaking entry is
+          # first under its heading, so it is the first thing an upgrader reads. The script
+          # exits 1 when the section is missing, and the release stops before it is created.
+          node scripts/release-notes.mjs "$VERSION" > /tmp/section.md
+          gh release create "$TAG" --title "v$VERSION" --generate-notes --verify-tag
+          {
+            echo "## What's in $VERSION"
+            echo
+            cat /tmp/section.md
+            echo
+            echo "---"
+            echo
+            echo "## Install"
+            echo
+            echo '```'
+            echo "npm install -g disclosegate"
+            echo "cd your-repository && disclosegate init && disclosegate install"
+            echo '```'
+            echo
+            echo "Nothing is sent anywhere: the hook reads git and two files, and prints masked findings."
+            echo
+            echo "Repo: https://github.com/Allan-Nava/disclosegate"
+            echo
+            echo "---"
+            echo
+            gh release view "$TAG" --json body --jq .body
+          } > /tmp/notes.md
+          gh release edit "$TAG" --notes-file /tmp/notes.md
+
+      # Only when it is actually finished — a milestone with open issues stays
+      # open, and says so in the log.
+      - name: Close the milestone
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          NUM=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=open" \
+                  --jq ".[] | select(.title | startswith(\"v$VERSION\")) | .number" | head -1)
+          if [ -z "$NUM" ]; then
+            echo "::notice::no open milestone titled v$VERSION — nothing to close"
+            exit 0
+          fi
+          OPEN=$(gh api "repos/$GITHUB_REPOSITORY/milestones/$NUM" --jq .open_issues)
+          if [ "$OPEN" != "0" ]; then
+            echo "::warning::milestone #$NUM still has $OPEN open issue(s) — leaving it open"
+            exit 0
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/milestones/$NUM" -f state=closed \
+            --jq '"closed milestone: \(.title)"'

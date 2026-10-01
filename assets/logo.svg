@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>disclosegate</title>
+  <rect width="64" height="64" rx="14" fill="#3a3f9e"/>
+  <!-- the shield -->
+  <path d="M32 9 L51 16 V30 C51 42 43 50.5 32 55 C21 50.5 13 42 13 30 V16 Z" fill="#fff"/>
+  <!-- the gate: bars across it, the push held back -->
+  <rect x="21.5" y="22" width="4.5" height="20" rx="2.25" fill="#3a3f9e"/>
+  <rect x="29.75" y="19" width="4.5" height="27" rx="2.25" fill="#3a3f9e"/>
+  <rect x="38" y="22" width="4.5" height="20" rx="2.25" fill="#3a3f9e"/>
+  <rect x="19" y="29" width="26" height="4.5" rx="2.25" fill="#3a3f9e"/>
+</svg>
