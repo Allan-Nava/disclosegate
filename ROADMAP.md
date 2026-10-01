@@ -16,19 +16,19 @@
 
 ## v0.0.1 — The guard, test-first
 
-- [x] **DG-1** — The brief · high · S · project · `main`
-- [x] **DG-2** — The rules · high · M · rules · `main`
-- [x] **DG-3** — Reading what leaves · high · M · hook · `main`
-- [x] **DG-4** — Config with a trust order · high · M · config · `main`
-- [x] **DG-5** — Remote enforcement · med · S · config · `main`
-- [x] **DG-6** — Output that is safe to log · high · S · rules · `main`
-- [x] **DG-7** — install and uninstall · high · S · hook · `main`
-- [x] **DG-8** — init and doctor · med · S · config · `main`
-- [x] **DG-9** — check, the repository's own invariants · high · S · tests · `main`
-- [x] **DG-10** — The end-to-end suite · high · M · tests · `main`
-- [x] **DG-11** — CI and release · med · M · release · `main`
-- [x] **DG-12** — Site, mark and documents · med · M · docs · `main`
-- [x] **DG-13** — Backlog tooling · low · S · project · `main`
+- [x] **DG-1** — The brief · high · S · project · `0.0.2`
+- [x] **DG-2** — The rules · high · M · rules · `0.0.2`
+- [x] **DG-3** — Reading what leaves · high · M · hook · `0.0.2`
+- [x] **DG-4** — Config with a trust order · high · M · config · `0.0.2`
+- [x] **DG-5** — Remote enforcement · med · S · config · `0.0.2`
+- [x] **DG-6** — Output that is safe to log · high · S · rules · `0.0.2`
+- [x] **DG-7** — install and uninstall · high · S · hook · `0.0.2`
+- [x] **DG-8** — init and doctor · med · S · config · `0.0.2`
+- [x] **DG-9** — check, the repository's own invariants · high · S · tests · `0.0.2`
+- [x] **DG-10** — The end-to-end suite · high · M · tests · `0.0.2`
+- [x] **DG-11** — CI and release · med · M · release · `0.0.2`
+- [x] **DG-12** — Site, mark and documents · med · M · docs · `0.0.2`
+- [x] **DG-13** — Backlog tooling · low · S · project · `0.0.2`
 
 ## v0.1.0 — A week in audit mode
 
@@ -36,9 +36,9 @@
 - [ ] **DG-15** — Fix what the week finds false · high · M · rules, tests
 - [ ] **DG-16** — First publish, by hand · high · S · release
 - [ ] **DG-17** — Switch to block · med · S · docs
-- [x] **DG-25** — A symlinked user file can publish the private list · high · S · config, tests · `main`
-- [x] **DG-26** — A repository's own terms refuse the push that adds them · med · S · rules, tests · `main`
-- [x] **DG-27** — Release drift fails on a version that is not meant to be tagged · high · S · release · `main`
+- [x] **DG-25** — A symlinked user file can publish the private list · high · S · config, tests · `0.0.2`
+- [x] **DG-26** — A repository's own terms refuse the push that adds them · med · S · rules, tests · `0.0.2`
+- [x] **DG-27** — Release drift fails on a version that is not meant to be tagged · high · S · release · `0.0.2`
 
 ## v0.2.0 — What the first version does not read
 
