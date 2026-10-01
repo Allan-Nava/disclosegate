@@ -1,7 +1,7 @@
 // The commands run by hand: scan, install and uninstall, init, doctor, and the exit
 // codes that tell a finding (1) from a usage or configuration error (2).
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { stripComments } from '../bin/lib/config.mjs'
@@ -130,6 +130,15 @@ test('init refuses to write the user config inside the repository', () => {
   const r = sb.run(['init'], { extraEnv: { DISCLOSEGATE_CONFIG: join(sb.work, 'mine.json') } })
   assert.equal(r.code, 2)
   assert.match(r.stderr, /never live in one/)
+})
+
+test('init refuses a user config path that is a dangling symlink into the repository', () => {
+  const sb = sandbox()
+  symlinkSync(join(sb.work, 'mine.json'), sb.env.DISCLOSEGATE_CONFIG)
+  const r = sb.run(['init'])
+  assert.equal(r.code, 2, r.out)
+  assert.match(r.stderr, /never live in one/)
+  assert.ok(!existsSync(join(sb.work, 'mine.json')), 'nothing was written through the link')
 })
 
 test('doctor: config, rules, hook and remotes', () => {

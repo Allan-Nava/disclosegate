@@ -10,17 +10,17 @@
 //
 // Both files are JSON with `//` and `/* */` comments. A missing user file is not an
 // error: the path rule needs no list and still runs.
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path'
-import { compileTerm, wildcard } from './rules.mjs'
+import { compileTerm, REPO_FILE, wildcard } from './rules.mjs'
 
 export class ConfigError extends Error {}
 
 export const USER_KEYS = ['publicEmails', 'blockedDomains', 'terms', 'blockedNames', 'allowPaths', 'mode', 'remotes']
 export const REPO_KEYS = ['terms', 'blockedDomains', 'allowPaths']
 const LISTS = ['publicEmails', 'blockedDomains', 'terms', 'blockedNames', 'allowPaths']
-export const REPO_FILE = '.disclosegate.json'
+export { REPO_FILE }
 
 export const userConfigPath = (env = process.env) => (env.DISCLOSEGATE_CONFIG ? resolve(env.DISCLOSEGATE_CONFIG) : join(env.HOME || homedir(), '.disclosegate.json'))
 
@@ -113,8 +113,21 @@ const real = (p) => {
     return resolve(p)
   }
 }
+// The file itself is resolved, not only its directory: a user file that is a symlink
+// into a dotfiles repository lives in that repository. A file that does not exist yet
+// (`init`) resolves through its directory — and through its link, if it is a dangling
+// one, since writing it would follow the link.
+const resolveFile = (p, hops = 0) => {
+  try {
+    return realpathSync(p)
+  } catch {}
+  try {
+    if (hops < 40 && lstatSync(p).isSymbolicLink()) return resolveFile(resolve(real(dirname(p)), readlinkSync(p)), hops + 1)
+  } catch {}
+  return join(real(dirname(p)), p.split(/[\\/]/).pop())
+}
 export function inside(file, dir) {
-  const rel = relative(real(dir), join(real(dirname(file)), file.split(/[\\/]/).pop()))
+  const rel = relative(real(dir), resolveFile(file))
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
 }
 
@@ -148,7 +161,7 @@ export function loadConfig({ env = process.env, repoRoot = null } = {}) {
   const effective = {
     publicEmails: lower(u.publicEmails ?? []),
     blockedDomains: uniq(domains([...(u.blockedDomains ?? []), ...(r.blockedDomains ?? [])])),
-    terms: termSources.map(compileTerm),
+    terms: termSources.map((t) => ({ ...compileTerm(t), fromRepo: !(u.terms ?? []).includes(t) })),
     blockedNames: u.blockedNames ?? [],
     allowPaths: uniq([...(u.allowPaths ?? []), ...(r.allowPaths ?? [])]),
     mode: u.mode ?? 'block',

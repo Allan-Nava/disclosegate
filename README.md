@@ -109,7 +109,10 @@ by anyone with commit access, so it may only **tighten**: add `terms` and
 `blockedDomains`. It may also set `allowPaths`, globs such as `test/fixtures/**` for files
 that have to quote a path. `allowPaths` exempts files from the path rule only — never from the email or term rules.
 Every other key in it — `publicEmails`, `mode`, `remotes` — is ignored, a warning says
-so on every run, and `doctor` lists it.
+so on every run, and `doctor` lists it. The file's own lines are exempt from the terms
+it adds — or the commit that adds it would be refused by it — but not from a term in the
+user file or from any other rule; a term written there is public, so it fits a name that
+is already out, never a private one.
 
 `mode` is `block` (the default: a finding refuses the push) or `audit` (findings are
 printed and the push goes through). `remotes.enforce` and `remotes.skip` are globs, `*`

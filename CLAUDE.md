@@ -62,6 +62,8 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    inside the repository being checked. The repository file may only add `terms` and
    `blockedDomains` and set `allowPaths`; any other key is ignored and reported.
    `allowPaths` exempts files from the path rule only — never from the email or term rules.
+   The repository file's own lines are exempt from the terms it adds, and from nothing
+   else — the user's terms and the email, name and path rules still read them.
 5. **Never sends.** No network call, no telemetry. `git`, two files, stdout and stderr.
 6. **Only its own hook.** Marked by `MARKER` in `bin/lib/hook.mjs`; a foreign hook is left
    alone without `--force`, moved aside with it, restored by `uninstall`.

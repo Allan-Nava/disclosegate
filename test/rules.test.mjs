@@ -108,6 +108,23 @@ test('allowPaths exempts a file from the path rule only — never from the email
   assert.equal(scanCommits([c], cfg({ terms })).filter((x) => x.rule === 'path').length, 1, 'without the glob the path is found')
 })
 
+test("the repository's own config is exempt from its own terms only — not the user's, not the other rules", () => {
+  const own = { ...compileTerm('internal-name'), fromRepo: true }
+  const users = compileTerm('private-name')
+  const c = commit({
+    added: [
+      { file: '.disclosegate.json', line: 1, text: '{ "terms": ["internal-name", "private-name"], "allowPaths": ["/home/user/x"] }' },
+      { file: 'notes.txt', line: 1, text: 'internal-name' },
+      { file: 'sub/.disclosegate.json', line: 1, text: 'internal-name' },
+    ],
+  })
+  const f = scanCommits([c], cfg({ terms: [own, users] }))
+  assert.deepEqual(kinds(f), ['term/.disclosegate.json:1', 'term/notes.txt:1', 'term/sub/.disclosegate.json:1', 'path/.disclosegate.json:1'])
+  assert.equal(f[0].match, 'private-name', 'only the user term is found in the config')
+  const m = scanCommits([commit({ message: 'rename internal-name' })], cfg({ terms: [own] }))
+  assert.deepEqual(kinds(m), ['term/message'], 'a commit message is not the config')
+})
+
 test('globs: ** crosses directories, * does not', () => {
   assert.ok(matchesGlob('test/fixtures/deep/a.txt', ['test/fixtures/**']))
   assert.ok(matchesGlob('a.txt', ['**/*.txt']) && matchesGlob('x/y/a.txt', ['**/*.txt']))
