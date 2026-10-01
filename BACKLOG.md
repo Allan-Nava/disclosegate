@@ -104,12 +104,14 @@ and rates are published, the matches are not.
   add a push test with the symlink. Done 2026-10-01: `inside()` resolves the file itself,
   and follows a dangling link for `init`; push tests for a file and a directory symlink.
   <!-- dg: prio=high size=S labels=config,tests ver=main -->
-- [ ] **DG-26 — A repository's own terms refuse the push that adds them**: found by the
+- [x] **DG-26 — A repository's own terms refuse the push that adds them**: found by the
   DG-1 Questions phase (Q7). A plain-string term in a committed `.disclosegate.json`
   matches its own added line, so the commit that introduces the file is refused by it;
   `test/push.test.mjs` never commits the file with a term. Exempt the term rule on the
   lines of `.disclosegate.json` itself (the email and path rules still apply), with a test.
-  <!-- dg: prio=med size=S labels=rules,tests -->
+  Done 2026-10-01: the root `.disclosegate.json` is exempt from the terms it adds only; a
+  user term and every other rule still read it.
+  <!-- dg: prio=med size=S labels=rules,tests ver=main -->
 
 ## v0.2.0 — What the first version does not read <!-- ms: phase=later -->
 

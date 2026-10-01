@@ -9,6 +9,9 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 - A user config that is a symlink into the repository being pushed — a dotfiles
   repository — is now refused like one that lives there: the file itself is resolved,
   not only its directory, and `init` follows a dangling link before writing (DG-25).
+- A repository's `.disclosegate.json` no longer refuses the push that adds it: its own
+  lines are exempt from the terms it defines, and from nothing else — a term from the
+  user file and the email, name and path rules still read them (DG-26).
 
 ## [0.0.1] — 2026-10-01
 

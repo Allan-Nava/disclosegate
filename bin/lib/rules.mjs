@@ -130,7 +130,12 @@ export const domainBlocked = (email, domains) => {
 }
 export const emailPublic = (email, publicEmails) => publicEmails.some((p) => wildcard(p).test(email.trim()))
 
-// cfg: { publicEmails, blockedDomains, terms: [{source, re}], blockedNames, allowPaths }
+// The repository file, at the root. A term it defines (`fromRepo`) is exempt on its own
+// lines, or the commit that adds the file is refused by it; every other rule still
+// reads them, and so does a term that also comes from the user file.
+export const REPO_FILE = '.disclosegate.json'
+
+// cfg: { publicEmails, blockedDomains, terms: [{source, re, fromRepo?}], blockedNames, allowPaths }
 export function scanCommits(commits, cfg) {
   const out = []
   const terms = cfg.terms ?? []
@@ -152,8 +157,9 @@ export function scanCommits(commits, cfg) {
     const name = (where, n) => {
       if (n && blockedNames.includes(n.trim().toLowerCase())) add({ where, rule: 'name', kind: 'blocked name', match: n })
     }
-    const termsIn = (where, text) => {
+    const termsIn = (where, text, own = false) => {
       for (const t of terms) {
+        if (own && t.fromRepo) continue
         const m = firstMatch(t.re, text)
         if (m) add({ where, rule: 'term', kind: 'term', match: m })
       }
@@ -186,7 +192,7 @@ export function scanCommits(commits, cfg) {
     }
     for (const a of c.added ?? []) {
       const where = `${secretNames.has(a.file) ? mask(a.file) : a.file}:${a.line}`
-      termsIn(where, a.text)
+      termsIn(where, a.text, a.file === REPO_FILE)
       if (!matchesGlob(a.file, allowPaths)) pathsIn(where, a.text)
     }
   })

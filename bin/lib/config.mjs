@@ -13,14 +13,14 @@
 import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path'
-import { compileTerm, wildcard } from './rules.mjs'
+import { compileTerm, REPO_FILE, wildcard } from './rules.mjs'
 
 export class ConfigError extends Error {}
 
 export const USER_KEYS = ['publicEmails', 'blockedDomains', 'terms', 'blockedNames', 'allowPaths', 'mode', 'remotes']
 export const REPO_KEYS = ['terms', 'blockedDomains', 'allowPaths']
 const LISTS = ['publicEmails', 'blockedDomains', 'terms', 'blockedNames', 'allowPaths']
-export const REPO_FILE = '.disclosegate.json'
+export { REPO_FILE }
 
 export const userConfigPath = (env = process.env) => (env.DISCLOSEGATE_CONFIG ? resolve(env.DISCLOSEGATE_CONFIG) : join(env.HOME || homedir(), '.disclosegate.json'))
 
@@ -161,7 +161,7 @@ export function loadConfig({ env = process.env, repoRoot = null } = {}) {
   const effective = {
     publicEmails: lower(u.publicEmails ?? []),
     blockedDomains: uniq(domains([...(u.blockedDomains ?? []), ...(r.blockedDomains ?? [])])),
-    terms: termSources.map(compileTerm),
+    terms: termSources.map((t) => ({ ...compileTerm(t), fromRepo: !(u.terms ?? []).includes(t) })),
     blockedNames: u.blockedNames ?? [],
     allowPaths: uniq([...(u.allowPaths ?? []), ...(r.allowPaths ?? [])]),
     mode: u.mode ?? 'block',

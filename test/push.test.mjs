@@ -118,6 +118,37 @@ test('a repository config that tries to loosen is ignored, and doctor says so', 
   assert.match(d.stdout, /terms on \(1\)/, 'the tightening half is applied')
 })
 
+test("a repository's own terms do not refuse the push that adds its config", () => {
+  const sb = guarded()
+  sb.repoConfig({ terms: ['internal-name'] })
+  sb.git(['add', '.disclosegate.json'])
+  sb.commit({ message: 'guard a retired name' })
+  const r = sb.push()
+  assert.equal(r.code, 0, r.out)
+  assert.ok(sb.remoteHas('refs/heads/main'))
+})
+
+test("a repository's own terms still refuse another file in the same push, and a user term refuses the config", () => {
+  const sb = guarded()
+  sb.repoConfig({ terms: ['internal-name'] })
+  sb.git(['add', '.disclosegate.json'])
+  sb.commit({ message: 'guard a retired name' })
+  sb.commit({ file: 'notes.txt', content: 'deploy to internal-name\n' })
+  const r = sb.push()
+  assert.notEqual(r.code, 0, r.out)
+  assert.ok(!sb.remoteHas('refs/heads/main'))
+  assert.match(r.out, /notes\.txt:1/)
+  assert.doesNotMatch(r.out, /\.disclosegate\.json:1/, 'the config defining the term is exempt from it')
+
+  const sb2 = guarded({ publicEmails: [ALICE.email], terms: ['internal-name'] })
+  sb2.repoConfig({ terms: ['internal-name'] })
+  sb2.git(['add', '.disclosegate.json'])
+  sb2.commit()
+  const r2 = sb2.push()
+  assert.notEqual(r2.code, 0, 'a term from the private list is refused even in the repository config')
+  assert.match(r2.out, /\.disclosegate\.json:1/)
+})
+
 test('audit mode prints the findings and lets the push through', () => {
   const sb = guarded({ publicEmails: [ALICE.email], mode: 'audit' })
   sb.commit({ author: BOB })
