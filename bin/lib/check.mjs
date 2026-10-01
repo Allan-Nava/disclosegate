@@ -89,7 +89,7 @@ export function check(root, env = process.env) {
   if (!/^\d+\.\d+\.\d+$/.test(pkg.version ?? '')) fail('package.json: version must be x.y.z')
   if (pkg.engines?.node !== '>=18') fail('package.json: engines.node must be ">=18"')
   if (pkg.dependencies && Object.keys(pkg.dependencies).length) fail('package.json: zero runtime dependencies — move it to devDependencies or write it')
-  if (pkg.repository?.url !== 'https://github.com/Allan-Nava/disclosegate') fail('package.json: repository.url must name the GitHub repository')
+  if (pkg.repository?.url !== 'git+https://github.com/Allan-Nava/disclosegate.git') fail('package.json: repository.url must name the GitHub repository')
   if (!(pkg.files ?? []).includes('bin')) fail('package.json: files must ship bin')
 
   const changelog = read('CHANGELOG.md')

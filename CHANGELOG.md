@@ -5,6 +5,10 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+### Changed
+- `repository.url` takes the form npm normalises it to (`git+https://….git`), so `npm
+  publish` no longer rewrites it and warns. `check` expects that form.
+
 ## [0.0.2] — 2026-10-01
 
 Not yet measured on a week of real pushes — run it in `audit` mode until 0.1.0 (DG-14).
