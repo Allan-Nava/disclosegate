@@ -4,14 +4,14 @@
 
 > This page is **generated** from [BACKLOG.md](BACKLOG.md), the single source of truth for planned work. Regenerate it with `node scripts/backlog.mjs roadmap` after editing the backlog — CI fails when the two disagree.
 
-**26 items · 15 shipped · 11 open · 3 milestones.**
+**27 items · 16 shipped · 11 open · 3 milestones.**
 
 ## At a glance
 
 | Milestone | Phase | Progress | Open | Shipped |
 |---|---|---|---|---|
 | **v0.0.1 — The guard, test-first** | now | `##########` 100% | 0 | 13 |
-| **v0.1.0 — A week in audit mode** | next | `###.......` 33% | 4 | 2 |
+| **v0.1.0 — A week in audit mode** | next | `####......` 43% | 4 | 3 |
 | **v0.2.0 — What the first version does not read** | later | `..........` 0% | 7 | 0 |
 
 ## v0.0.1 — The guard, test-first
@@ -38,6 +38,7 @@
 - [ ] **DG-17** — Switch to block · med · S · docs
 - [x] **DG-25** — A symlinked user file can publish the private list · high · S · config, tests · `main`
 - [x] **DG-26** — A repository's own terms refuse the push that adds them · med · S · rules, tests · `main`
+- [x] **DG-27** — Release drift fails on a version that is not meant to be tagged · high · S · release · `main`
 
 ## v0.2.0 — What the first version does not read
 

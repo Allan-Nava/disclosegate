@@ -13,7 +13,7 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   lines are exempt from the terms it defines, and from nothing else — a term from the
   user file and the email, name and path rules still read them (DG-26).
 
-## [0.0.1] — 2026-10-01
+## [0.0.1] — 2026-10-01 — not released
 
 Not released. The first version, written test-first from the brief (DG-1); it goes to
 npm as 0.1.0 after a week in audit mode on real repositories (DG-14).
