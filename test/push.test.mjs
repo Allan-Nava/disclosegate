@@ -1,6 +1,8 @@
 // End to end: a real `git push` through the installed hook, against a bare remote.
 // A refused push must leave the remote without the ref; a passing one must land it.
 import assert from 'node:assert/strict'
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { test } from 'node:test'
 import { ALICE, BOB, HOME_PATH, sandbox } from './helpers.mjs'
 
@@ -155,4 +157,45 @@ test('core.hooksPath is where the hook goes', () => {
   assert.match(r.stdout, /\.githooks\/pre-push/)
   sb.commit({ content: `${HOME_PATH}\n` })
   assert.notEqual(sb.push().code, 0, 'git runs it from there')
+})
+
+// A dotfiles repository: the user file is a symlink into the work tree being pushed.
+// Its lists hold no term, so nothing in the commit would match — only the refusal
+// keeps the private list from leaving.
+test('a user file that is a symlink into the repository is refused, and nothing is pushed', () => {
+  const sb = sandbox()
+  assert.equal(sb.run(['install']).code, 0)
+  sb.commit({ file: 'disclosegate.json', content: JSON.stringify({ publicEmails: [ALICE.email], blockedDomains: ['example.internal'] }) })
+  symlinkSync(join(sb.work, 'disclosegate.json'), sb.env.DISCLOSEGATE_CONFIG)
+  const r = sb.push()
+  assert.notEqual(r.code, 0, r.out)
+  assert.ok(!sb.remoteHas('refs/heads/main'), 'nothing reached the remote')
+  assert.match(r.out, /must never live in a repository/)
+  const s = sb.run(['scan', '--history'])
+  assert.equal(s.code, 2, s.out)
+  assert.match(s.stderr, /must never live in a repository/)
+})
+
+test('a user file reached through a symlinked directory into the repository is refused', () => {
+  const sb = sandbox()
+  assert.equal(sb.run(['install']).code, 0)
+  mkdirSync(join(sb.work, 'dotfiles'))
+  sb.commit({ file: 'dotfiles/disclosegate.json', content: JSON.stringify({ publicEmails: [ALICE.email] }) })
+  symlinkSync(join(sb.work, 'dotfiles'), join(sb.home, 'dotfiles'))
+  const extraEnv = { DISCLOSEGATE_CONFIG: join(sb.home, 'dotfiles', 'disclosegate.json') }
+  const s = sb.run(['scan', '--history'], { extraEnv })
+  assert.equal(s.code, 2, s.out)
+  assert.match(s.stderr, /must never live in a repository/)
+})
+
+test('a user file that is a symlink to a file outside the repository is read as usual', () => {
+  const sb = sandbox()
+  assert.equal(sb.run(['install']).code, 0)
+  const target = join(sb.base, 'elsewhere.json')
+  writeFileSync(target, JSON.stringify({ publicEmails: [ALICE.email] }))
+  symlinkSync(target, sb.env.DISCLOSEGATE_CONFIG)
+  sb.commit()
+  const r = sb.push()
+  assert.equal(r.code, 0, r.out)
+  assert.ok(sb.remoteHas('refs/heads/main'))
 })

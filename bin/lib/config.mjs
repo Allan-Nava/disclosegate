@@ -10,7 +10,7 @@
 //
 // Both files are JSON with `//` and `/* */` comments. A missing user file is not an
 // error: the path rule needs no list and still runs.
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path'
 import { compileTerm, wildcard } from './rules.mjs'
@@ -113,8 +113,21 @@ const real = (p) => {
     return resolve(p)
   }
 }
+// The file itself is resolved, not only its directory: a user file that is a symlink
+// into a dotfiles repository lives in that repository. A file that does not exist yet
+// (`init`) resolves through its directory — and through its link, if it is a dangling
+// one, since writing it would follow the link.
+const resolveFile = (p, hops = 0) => {
+  try {
+    return realpathSync(p)
+  } catch {}
+  try {
+    if (hops < 40 && lstatSync(p).isSymbolicLink()) return resolveFile(resolve(real(dirname(p)), readlinkSync(p)), hops + 1)
+  } catch {}
+  return join(real(dirname(p)), p.split(/[\\/]/).pop())
+}
 export function inside(file, dir) {
-  const rel = relative(real(dir), join(real(dirname(file)), file.split(/[\\/]/).pop()))
+  const rel = relative(real(dir), resolveFile(file))
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
 }
 

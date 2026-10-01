@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+### Fixed
+- A user config that is a symlink into the repository being pushed — a dotfiles
+  repository — is now refused like one that lives there: the file itself is resolved,
+  not only its directory, and `init` follows a dangling link before writing (DG-25).
+
 ## [0.0.1] — 2026-10-01
 
 Not released. The first version, written test-first from the brief (DG-1); it goes to
