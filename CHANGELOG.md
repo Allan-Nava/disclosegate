@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+## [0.0.2] — 2026-10-01
+
+Not yet measured on a week of real pushes — run it in `audit` mode until 0.1.0 (DG-14).
+The first version on npm, published by hand so that npm's trusted publisher can be
+configured (DG-16).
+
 ### Fixed
 - A user config that is a symlink into the repository being pushed — a dotfiles
   repository — is now refused like one that lives there: the file itself is resolved,
@@ -12,6 +18,9 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 - A repository's `.disclosegate.json` no longer refuses the push that adds it: its own
   lines are exempt from the terms it defines, and from nothing else — a term from the
   user file and the email, name and path rules still read them (DG-26).
+- The release job closes only the milestone named for its version — `v<version>`, or
+  `v<version> — Theme` — not one whose title merely starts with it, so a tag can no
+  longer close a later milestone such as `v0.0.20` (DG-16).
 
 ## [0.0.1] — 2026-10-01 — not released
 

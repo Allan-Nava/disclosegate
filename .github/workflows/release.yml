@@ -169,13 +169,18 @@ jobs:
 
       # Only when it is actually finished — a milestone with open issues stays
       # open, and says so in the log.
+      #
+      # The milestone is "v<version>" exactly or "v<version> — Theme", never a bare
+      # prefix: startswith("v0.0.2") would also take a "v0.0.20 — …" milestone. A
+      # version with no milestone of its own — 0.0.2, the hand-published bootstrap —
+      # closes nothing, and the v0.1.0 milestone stays open for its audit week.
       - name: Close the milestone
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.v.outputs.version }}
         run: |
-          NUM=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=open" \
-                  --jq ".[] | select(.title | startswith(\"v$VERSION\")) | .number" | head -1)
+          NUM=$(gh api "repos/$GITHUB_REPOSITORY/milestones?state=open&per_page=100" \
+                  --jq ".[] | select(.title == \"v$VERSION\" or (.title | startswith(\"v$VERSION \"))) | .number" | head -1)
           if [ -z "$NUM" ]; then
             echo "::notice::no open milestone titled v$VERSION — nothing to close"
             exit 0

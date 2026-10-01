@@ -11,12 +11,14 @@ says must not be public. It checks *before*, because after is too late: once a c
 on a forge it stays reachable by its SHA even when a force-push has removed it from
 every branch.
 
-> **Status: 0.0.1, not released.** The hook, the four rules, the config with its trust
-> order, `scan`, `install`, `init`, `doctor` and `check` are written and covered by
-> tests that run real `git push` commands against a bare remote. What is still missing
-> is evidence from real work: v0.1.0 — the first version on npm — waits for a week of the
-> guard in `audit` mode on the maintainer's own repositories, every finding classified
-> true or false and the result recorded here, dated (DG-14 in [BACKLOG.md](BACKLOG.md)).
+> **Status: 0.0.2, on npm — run it in `audit` mode.** The hook, the four rules, the
+> config with its trust order, `scan`, `install`, `init`, `doctor` and `check` are
+> written and covered by tests that run real `git push` commands against a bare remote.
+> What is still missing is evidence from real work: the false-positive rate on real
+> pushes is unmeasured, so set `"mode": "audit"` — findings are printed, the push goes
+> through — until 0.1.0. v0.1.0 waits for a week of the guard in `audit` mode on the
+> maintainer's own repositories, every finding classified true or false and the result
+> recorded here, dated (DG-14 in [BACKLOG.md](BACKLOG.md)).
 
 ## Why not gitleaks
 
@@ -34,21 +36,19 @@ last moment it can still be applied.
 
 ## Install
 
-From a checkout, until v0.1.0 is on npm:
-
 ```bash
-git clone https://github.com/Allan-Nava/disclosegate
+npm install -g disclosegate
 cd your-repository
-node ../disclosegate/bin/disclosegate.mjs init      # ~/.disclosegate.json, placeholders only
-node ../disclosegate/bin/disclosegate.mjs install   # .git/hooks/pre-push
-node ../disclosegate/bin/disclosegate.mjs doctor
+disclosegate init      # ~/.disclosegate.json, placeholders only
+disclosegate install   # .git/hooks/pre-push
+disclosegate doctor
 ```
 
-Once published, install it globally — `npm install -g disclosegate`, then
-`disclosegate install` in each repository. Not through `npx`: the hook remembers the
-script that installed it, and npm prunes its `npx` cache, after which the hook falls back
-to a `disclosegate` on `PATH` and, finding none, refuses the push rather than silently
-stop guarding.
+Then set `"mode": "audit"` in `~/.disclosegate.json` until 0.1.0 (see the status above).
+`disclosegate install` once in each repository, or once into a global `core.hooksPath`.
+Install it globally, not through `npx`: the hook remembers the script that installed
+it, and npm prunes its `npx` cache, after which the hook falls back to a `disclosegate`
+on `PATH` and, finding none, refuses the push rather than silently stop guarding.
 
 Node 18 or later. No runtime dependency.
 

@@ -47,20 +47,40 @@ stable `DG-n` id and a trailing `<!-- dg: prio= size= labels= [ver=] -->` commen
 Releases run from GitHub Actions; pushing the tag is the manual step, and
 `release-drift.yml` fails when `main` carries a version with no tag for two hours.
 
-**One-time bootstrap — the first publish is by hand.** No npm token lives here; the
+**One-time bootstrap — 0.0.2, published by hand.** No npm token lives here; the
 release job authenticates over OIDC (npm Trusted Publishing). npm cannot configure a
-trusted publisher for a package that does not exist, so the first version is published
-from a clean checkout of its tag:
+trusted publisher for a package that does not exist, so the first version on npm —
+0.0.2, decided 2026-10-01 (DG-16) — is published by hand, and from 0.1.0 on every
+version releases from CI. The audit-week gate on 0.1.0 (DG-14) does not move. In this
+order, after the release pull request has merged:
 
 ```bash
-git checkout disclosegate--v0.1.0 && npm test && npm publish --access public
+# 1. publish from a clean checkout of main at the merged commit (nothing merged since)
+git checkout main && git pull --ff-only
+git status --short                      # must print nothing
+npm test
+npm login
+npm publish --access public
+
+# 2. bind the trusted publisher to release.yml (npm >= 11.15 for `npm trust`)
+npm trust github disclosegate --repo Allan-Nava/disclosegate --file release.yml --allow-publish
+
+# 3. tag the merged commit; release.yml skips the published version and cuts the release
+git tag disclosegate--v0.0.2 && git push origin disclosegate--v0.0.2
 ```
 
-Then on npmjs.com → package → Settings → Trusted Publisher → GitHub Actions: user
-`Allan-Nava`, repository `disclosegate` (the name only, not the URL), workflow
-`release.yml`, environment empty, "Allow npm publish" ticked. The release job skips a
-version already on the registry, so it still cuts that tag's GitHub release and closes
-its milestone. Never give `actions/setup-node` a `registry-url`; never rename
+Step 2 can be done on npmjs.com instead → package → Settings → Trusted Publisher →
+GitHub Actions: owner `Allan-Nava` exactly, repository `disclosegate` (the name only, not
+the URL), workflow `release.yml`, environment empty, "Allow npm publish" ticked.
+
+`release-drift.yml` fails once the merged 0.0.2 has gone two hours without its tag —
+the 0.0.2 CHANGELOG heading does not say "not released", so the check expects one. Run
+the three steps inside that window, or expect a failing run (and an email) until the
+tag is pushed. The tag's run verifies the version, runs `npm test`, skips the publish
+because `disclosegate@0.0.2` is already on the registry, cuts the GitHub release and
+closes no milestone: there is no `v0.0.2` milestone, and the milestone step matches
+`v<version>` exactly or `v<version> — Theme`, so the v0.1.0 milestone stays open for
+its audit week. Never give `actions/setup-node` a `registry-url`; never rename
 `release.yml`.
 
 **Per release:**
@@ -76,7 +96,7 @@ git tag disclosegate--v{version} && git push origin disclosegate--v{version}
 ```
 
 The tag triggers `release.yml`: version check, tests, publish, wait for the registry,
-GitHub release, close the milestone whose title starts with `v{version}`. Re-run with
+GitHub release, close the milestone named `v{version}` or `v{version} — Theme`. Re-run with
 `gh workflow run Release -f tag=disclosegate--v{version}`; every step is idempotent.
 
 The notes open with the version's CHANGELOG section (`scripts/release-notes.mjs`), then
