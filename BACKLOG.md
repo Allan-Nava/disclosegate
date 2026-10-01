@@ -95,6 +95,20 @@ and rates are published, the matches are not.
 - [ ] **DG-17 — Switch to block**: after the week, `"mode": "block"` on the maintainer's
   machine; the README status line says when. <!-- dg: prio=med size=S labels=docs -->
 
+- [ ] **DG-25 — A symlinked user file can publish the private list**: found by the DG-1
+  Questions phase (Q5), 2026-10-01. `inside()` in `bin/lib/config.mjs` resolves the
+  directory of the user file but not the file itself, so a `~/.disclosegate.json` that is
+  a symlink into a dotfiles repository is not refused when that repository is pushed —
+  and if the list holds only `publicEmails` and `blockedDomains`, the scan of the commit
+  adding it comes back clean. Resolve the file with `realpathSync` before comparing, and
+  add a push test with the symlink. <!-- dg: prio=high size=S labels=config,tests -->
+- [ ] **DG-26 — A repository's own terms refuse the push that adds them**: found by the
+  DG-1 Questions phase (Q7). A plain-string term in a committed `.disclosegate.json`
+  matches its own added line, so the commit that introduces the file is refused by it;
+  `test/push.test.mjs` never commits the file with a term. Exempt the term rule on the
+  lines of `.disclosegate.json` itself (the email and path rules still apply), with a test.
+  <!-- dg: prio=med size=S labels=rules,tests -->
+
 ## v0.2.0 — What the first version does not read <!-- ms: phase=later -->
 
 - [ ] **DG-18 — Annotated tags**: a pushed annotated tag carries a tagger identity and a
