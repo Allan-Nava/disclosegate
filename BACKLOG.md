@@ -112,6 +112,13 @@ and rates are published, the matches are not.
   Done 2026-10-01: the root `.disclosegate.json` is exempt from the terms it adds only; a
   user term and every other rule still read it.
   <!-- dg: prio=med size=S labels=rules,tests ver=main -->
+- [x] **DG-27 — Release drift fails on a version that is not meant to be tagged**: 0.0.1 is
+  the scaffold — its CHANGELOG section says "Not released", the first published version is
+  0.1.0 — but `.github/workflows/release-drift.yml` reads no such marker, so two hours after
+  the version landed every run fails asking for a tag nobody should push. Found by the
+  backlogsync compatibility pass. Done 2026-10-01: the check skips a version whose CHANGELOG
+  heading ends "not released", as skilltrigger's does; the 0.0.1 heading carries it.
+  <!-- dg: prio=high size=S labels=release ver=main -->
 
 ## v0.2.0 — What the first version does not read <!-- ms: phase=later -->
 

@@ -37,6 +37,12 @@ jobs:
             echo "$TAG exists — nothing to report"
             exit 0
           fi
+          # A version the CHANGELOG marks "not released" is on main on purpose (0.0.1 is
+          # the scaffold; the first published version waits on its audit-week gate, DG-27).
+          if grep -Eq "^## \[$VERSION\] .*not released" CHANGELOG.md; then
+            echo "::notice::$VERSION is marked not released in CHANGELOG.md — no tag expected"
+            exit 0
+          fi
           # The commit that last touched the version line, and how long ago.
           SET_AT="$(git log -1 --format=%ct -G'"version"' -- package.json)"
           AGE=$(( $(date +%s) - SET_AT ))
