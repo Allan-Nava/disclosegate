@@ -17,8 +17,48 @@
   },
   "scripts": {
     "test": "node bin/disclosegate.mjs check && node --test",
-    "backlog": "node scripts/backlog.mjs lint && node scripts/backlog.mjs check",
-    "build:site": "node site/build.mjs"
+    "backlog": "npx --yes backlogsync@0.1.0 check",
+    "build:site": "node site/build.mjs",
+    "roadmap": "npx --yes backlogsync@0.1.0 roadmap"
+  },
+  "backlogsync": {
+    "prefix": "DG",
+    "name": "disclosegate",
+    "regenerate": "npm run roadmap",
+    "labels": {
+      "rules": [
+        "4338ca",
+        "The rules: email, term, path, name — what counts as a finding"
+      ],
+      "hook": [
+        "0e8a16",
+        "The pre-push hook, install and uninstall, the git protocol"
+      ],
+      "config": [
+        "e99695",
+        "User and repository config, the trust order, remotes"
+      ],
+      "release": [
+        "5319e7",
+        "Publishing and versioning"
+      ],
+      "docs": [
+        "0075ca",
+        "README, CONTRIBUTING, site"
+      ],
+      "project": [
+        "6a737d",
+        "Backlog, roadmap, repo hygiene"
+      ],
+      "tests": [
+        "d4c5f9",
+        "Test coverage and test tooling"
+      ],
+      "enhancement": [
+        "a2eeef",
+        "New capability"
+      ]
+    }
   },
   "repository": {
     "type": "git",

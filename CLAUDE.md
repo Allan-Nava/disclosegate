@@ -42,7 +42,6 @@ site/build.mjs         generates site/dist/index.html FROM README.md; adds only 
 assets/                logo.svg (single source for favicon, site, README), social-preview.html
 BACKLOG.md             single source of truth: stable DG-n ids, `<!-- dg: ... -->` metadata
 ROADMAP.md             GENERATED from BACKLOG.md — never edit
-scripts/backlog.mjs    lint · roadmap · check · stats · issues [--apply]
 scripts/release-notes.mjs  the CHANGELOG section for a version — the top of its release notes
 CHANGELOG.md           Keep a Changelog with DG-n ids; `check` wants [Unreleased] and the version
 CONTRIBUTING.md        local loop, release runbook with the first-publish bootstrap

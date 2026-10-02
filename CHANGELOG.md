@@ -6,6 +6,10 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 ## [Unreleased]
 
 ### Changed
+- The backlog check, the roadmap, the issue sync and the release-drift check are
+  [backlogsync](https://github.com/Allan-Nava/backlogsync) 0.1.0, configured in
+  `package.json#backlogsync`; `scripts/backlog.mjs`, its test and fixtures are gone, and
+  `npm run roadmap` regenerates `ROADMAP.md` (DG-28).
 - `repository.url` takes the form npm normalises it to (`git+https://….git`), so `npm
   publish` no longer rewrites it and warns. `check` expects that form.
 

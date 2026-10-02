@@ -76,6 +76,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-      - run: node scripts/backlog.mjs lint
-      - run: node scripts/backlog.mjs check
-      - run: node scripts/backlog_test.mjs
+      # backlogsync, pinned to its release: a malformed item or a stale roadmap fails
+      # here; the planner's own tests live in backlogsync (DG-28).
+      - uses: Allan-Nava/backlogsync@backlogsync--v0.1.0
+        with:
+          command: check
