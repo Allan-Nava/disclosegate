@@ -3,7 +3,7 @@
 The single source of truth for planned work. Every item has a stable `DG-n` id that
 commits, pull requests and the CHANGELOG reference, and a trailing
 `<!-- dg: prio= size= labels= [ver=] -->` comment. [ROADMAP.md](ROADMAP.md) is generated
-from this file (`node scripts/backlog.mjs roadmap`) and the GitHub issues are synced from
+from this file (`npm run roadmap`, backlogsync) and the GitHub issues are synced from
 it one way, on every push to `main` that touches it. Ticking an item ships it; closing
 an issue on GitHub changes nothing.
 
@@ -124,6 +124,13 @@ and rates are published, the matches are not.
   backlogsync compatibility pass. Done 2026-10-01: the check skips a version whose CHANGELOG
   heading ends "not released", as skilltrigger's does; the 0.0.1 heading carries it.
   <!-- dg: prio=high size=S labels=release ver=0.0.2 -->
+- [x] **DG-28 — The backlog tooling is backlogsync's**: `scripts/backlog.mjs` was one of
+  seven diverged copies of the same script, and its `release-drift.yml` the copy that read
+  no not-released marker (DG-27). Replace them, the script's test and fixtures with
+  backlogsync 0.1.0 — the CI `backlog` job and `backlog-issues.yml` through its action,
+  `release-drift.yml` through its reusable workflow, `npm run backlog` / `npm run roadmap`
+  through `npx backlogsync@0.1.0` — keeping the label set. Done 2026-10-02 (backlogsync
+  BS-14). <!-- dg: prio=med size=S labels=project ver=main -->
 
 ## v0.2.0 — What the first version does not read <!-- ms: phase=later -->
 

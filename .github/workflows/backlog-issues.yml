@@ -16,7 +16,6 @@ on:
     branches: [main]
     paths:
       - BACKLOG.md
-      - scripts/backlog.mjs
       - .github/workflows/backlog-issues.yml
   workflow_dispatch:
     inputs:
@@ -49,27 +48,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24
-
-      # The plan is printed before anything is applied, so the run's log says what
-      # it was about to do even if a later step fails.
-      - name: Plan
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node scripts/backlog.mjs issues \
-            ${{ github.event.inputs.milestones && format('--milestones {0}', github.event.inputs.milestones) || '' }} \
-            | tee "$RUNNER_TEMP/plan.txt"
-          {
-            echo "### Backlog issue sync — plan"
-            echo '```'
-            tail -2 "$RUNNER_TEMP/plan.txt"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Apply
-        if: github.event.inputs.dry_run != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node scripts/backlog.mjs issues --apply \
-            ${{ github.event.inputs.milestones && format('--milestones {0}', github.event.inputs.milestones) || '' }}
+      # backlogsync prints the plan before it applies anything, so the run's log says
+      # what it was about to do even if a write fails (DG-28).
+      - uses: Allan-Nava/backlogsync@backlogsync--v0.1.0
+        with:
+          command: sync
+          dry-run: ${{ github.event.inputs.dry_run == 'true' }}
+          milestones: ${{ github.event.inputs.milestones }}

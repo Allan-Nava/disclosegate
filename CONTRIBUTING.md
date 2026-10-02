@@ -34,7 +34,10 @@ runtime, so `check` can hold every other file to "no home path, no real address"
 `BACKLOG.md` is the single source of truth; `ROADMAP.md` is generated from it and the
 GitHub issues are synced from it one way on every push to `main` that touches the file.
 Ticking an item ships it; closing an issue on GitHub changes nothing. Items carry a
-stable `DG-n` id and a trailing `<!-- dg: prio= size= labels= [ver=] -->` comment.
+stable `DG-n` id and a trailing `<!-- dg: prio= size= labels= [ver=] -->` comment. The check,
+the roadmap and the sync are [backlogsync](https://github.com/Allan-Nava/backlogsync),
+configured in `package.json#backlogsync` and pinned to its release in `package.json`
+(`backlogsync@0.1.0`) and the workflows (`@backlogsync--v0.1.0`); bump them together.
 
 ## Pull requests
 
