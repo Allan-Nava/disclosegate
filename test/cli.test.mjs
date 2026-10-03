@@ -71,7 +71,7 @@ test('audit mode: scan prints and exits 0', () => {
   assert.match(r.stdout, /audit mode/)
 })
 
-test('install refuses to clobber a hook it did not write; --force moves it; uninstall restores it', () => {
+test('install refuses to clobber a hook it did not write; --force moves it and chains it; uninstall restores it', () => {
   const sb = sandbox()
   const hook = join(sb.work, '.git', 'hooks', 'pre-push')
   const foreign = '#!/bin/sh\necho another tool\n'
@@ -89,6 +89,8 @@ test('install refuses to clobber a hook it did not write; --force moves it; unin
   assert.match(readFileSync(hook, 'utf8'), /disclosegate-managed-hook/)
   assert.equal(readFileSync(`${hook}.before-disclosegate`, 'utf8'), foreign)
   assert.ok(statSync(hook).mode & 0o100, 'executable')
+  assert.match(f.stdout, /it runs after disclosegate/)
+  assert.match(sb.run(['doctor']).stdout, /installed — then pre-push\.before-disclosegate, chained/)
   assert.equal(sb.run(['install']).code, 0, 're-installing over its own hook is an update')
 
   const back = sb.run(['uninstall'])

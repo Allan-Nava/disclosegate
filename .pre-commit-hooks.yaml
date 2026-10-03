@@ -1,0 +1,14 @@
+# disclosegate for the pre-commit framework (https://pre-commit.com). It runs in the
+# pre-push stage: install that hook type with `pre-commit install --hook-type pre-push`.
+# pre-commit reads git's stdin itself and passes the first ref that sends anything
+# through PRE_COMMIT_* variables, which `disclosegate pre-push --pre-commit` reads.
+- id: disclosegate
+  name: disclosegate
+  description: Refuse a push whose commits carry internal detail — work addresses, private names, home paths.
+  entry: disclosegate pre-push --pre-commit
+  language: node
+  stages: [pre-push]
+  pass_filenames: false
+  always_run: true
+  require_serial: true
+  minimum_pre_commit_version: '3.2.0'

@@ -1,7 +1,7 @@
 // End to end: a real `git push` through the installed hook, against a bare remote.
 // A refused push must leave the remote without the ref; a passing one must land it.
 import assert from 'node:assert/strict'
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { ALICE, BOB, HOME_PATH, sandbox } from './helpers.mjs'
@@ -320,4 +320,71 @@ test('a clean annotated tag is pushed, and a lightweight one is its commit', () 
   assert.match(r.out, /1 tag checked — clean/)
   tag(sb, ['v1-light'], BOB)
   assert.equal(sb.push(['origin', 'v1-light']).code, 0, 'a lightweight tag has no tagger to check')
+})
+
+// DG-21: a hook `install --force` moved aside still runs — after disclosegate, with the
+// stdin git wrote and the arguments it passed — and its exit code counts.
+const chained = (sb, { exit = 0, dir = join(sb.work, '.git', 'hooks') } = {}) => {
+  mkdirSync(dir, { recursive: true })
+  const rec = (name) => join(sb.base, name)
+  writeFileSync(
+    join(dir, 'pre-push'),
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${rec('next-args')}'\ncat > '${rec('next-stdin')}'\necho 'the other hook ran' >&2\nexit ${exit}\n`,
+    { mode: 0o755 },
+  )
+  const r = sb.run(['install', '--force'])
+  assert.equal(r.code, 0, r.out)
+  return { r, args: () => readFileSync(rec('next-args'), 'utf8'), stdin: () => readFileSync(rec('next-stdin'), 'utf8'), ran: () => existsSync(rec('next-args')) }
+}
+
+test('a hook moved aside by install --force runs after disclosegate, with the same stdin and arguments', () => {
+  const sb = sandbox()
+  sb.userConfig({ publicEmails: [ALICE.email] })
+  const next = chained(sb)
+  assert.match(next.r.stdout, /runs after disclosegate/)
+  const sha = sb.commit()
+  mkdirSync(join(sb.work, 'sub'))
+  const r = sb.git(['push', 'origin', 'main'], { cwd: join(sb.work, 'sub'), allowFail: true })
+  assert.equal(r.code, 0, r.out)
+  assert.ok(sb.remoteHas('refs/heads/main'))
+  assert.match(r.out, /1 commit checked — clean[\s\S]*the other hook ran/, 'disclosegate first, then the other hook')
+  assert.equal(next.args(), `origin\n${sb.remote}\n`)
+  assert.equal(next.stdin(), `refs/heads/main ${sha} refs/heads/main ${'0'.repeat(40)}\n`)
+})
+
+test("the moved-aside hook's exit code counts: a push it refuses is refused", () => {
+  const sb = sandbox()
+  sb.userConfig({ publicEmails: [ALICE.email] })
+  chained(sb, { exit: 1 })
+  sb.commit()
+  const r = sb.push()
+  assert.notEqual(r.code, 0)
+  assert.ok(!sb.remoteHas('refs/heads/main'))
+  assert.match(r.out, /the other hook ran/)
+})
+
+test('a push disclosegate refuses never reaches the moved-aside hook', () => {
+  const sb = sandbox()
+  sb.userConfig({ publicEmails: [ALICE.email] })
+  const next = chained(sb)
+  sb.commit({ author: BOB })
+  const r = sb.push()
+  assert.notEqual(r.code, 0)
+  assert.match(r.out, /push refused/)
+  assert.ok(!next.ran(), 'the other hook did not run')
+  assert.ok(!sb.remoteHas('refs/heads/main'))
+})
+
+test('under core.hooksPath the moved-aside hook is chained from there, and uninstall restores it', () => {
+  const sb = sandbox()
+  sb.userConfig({ publicEmails: [ALICE.email] })
+  sb.git(['config', 'core.hooksPath', '.githooks'])
+  const next = chained(sb, { dir: join(sb.work, '.githooks') })
+  sb.commit({ file: 'a.txt' })
+  assert.equal(sb.push().code, 0)
+  assert.ok(next.ran())
+  const u = sb.run(['uninstall'])
+  assert.equal(u.code, 0, u.out)
+  assert.match(u.stdout, /restored/)
+  assert.doesNotMatch(readFileSync(join(sb.work, '.githooks', 'pre-push'), 'utf8'), /disclosegate-managed-hook/)
 })

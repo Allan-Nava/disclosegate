@@ -24,17 +24,22 @@ run on it.
 bin/disclosegate.mjs   the CLI: pre-push · scan · install · uninstall · init · doctor · check;
                        its header comment is the usage text and the site's command list
 bin/lib/               rules (pure: the four rules, masking, ordering — no fs, no git), git
-                       (one `git log -p --cc -U0` pass, settings pinned; annotated tags
+                       (one `git log -p --cc -U0` pass, settings pinned — streamed a
+                       commit at a time for `scan --history`; annotated tags
                        through one `cat-file --batch`; the pre-push protocol; the patch
                        parser, a merge's combined hunks included),
                        config (user file → repository file, the trust order, remotes,
                        the init template), report (text and JSON, masked),
-                       hook (hooks dir, the hook script, the marker, install/uninstall),
+                       hook (hooks dir, the hook script, the marker, install/uninstall,
+                       the moved-aside hook chained after disclosegate),
                        doctor, check (this repository's invariants), changelog
 test/                  node:test suites — rules.test.mjs (units; the only file that spells
                        the path shapes out), config, cli (scan/install/init/doctor/exit
                        codes), push (real `git push` through the hook into a bare remote),
-                       changelog; helpers.mjs builds the sandbox
+                       history (the streamed `--history` held to the collected reading,
+                       byte for byte), precommit (`--pre-commit` and a real push through a
+                       caller modelled on pre-commit's), changelog; helpers.mjs builds the
+                       sandbox
 .disclosegate.json     this repository's own repo config: allowPaths for rules.test.mjs only
 .github/workflows/     ci.yml (npm test on Node 18/20/22/24 without npm install; the tool on
                        its own history; a refused push by hand; pack; backlog), release.yml
@@ -44,6 +49,9 @@ test/                  node:test suites — rules.test.mjs (units; the only file
 site/build.mjs         generates site/dist/index.html FROM README.md; adds only the command
                        inventory read off bin/disclosegate.mjs
 assets/                logo.svg (single source for favicon, site, README), social-preview.html
+.pre-commit-hooks.yaml the pre-commit framework's definition: a pre-push stage hook calling
+                       `pre-push --pre-commit`, which reads PRE_COMMIT_* instead of stdin;
+                       `check` holds its six load-bearing keys
 BACKLOG.md             single source of truth: stable DG-n ids, `<!-- dg: ... -->` metadata
 ROADMAP.md             GENERATED from BACKLOG.md — never edit
 scripts/release-notes.mjs  the CHANGELOG section for a version — the top of its release notes
@@ -69,12 +77,18 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    else — the user's terms and the email, name and path rules still read them.
 5. **Never sends.** No network call, no telemetry. `git`, two files, stdout and stderr.
 6. **Only its own hook.** Marked by `MARKER` in `bin/lib/hook.mjs`; a foreign hook is left
-   alone without `--force`, moved aside with it, restored by `uninstall`.
+   alone without `--force`, moved aside with it, restored by `uninstall`. Moved aside, it
+   is chained, not dropped: the hook script runs it after disclosegate passes the push,
+   with the same arguments and stdin (held in a shell variable), and its exit code is the
+   hook's; a push disclosegate refuses never reaches it.
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
    `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
    diffs — and parses hunks by their counts, so an added line that begins with `++ ` is
    content. A merge is read through `--cc`, its combined hunks by the same counts, and
-   only a line new to every parent is its own.
+   only a line new to every parent is its own. `scan --history` streams the same pass
+   (`streamCommits`, `splitLog`) and holds findings, never commits; whatever it reads
+   must print exactly what the collected reading (`logCommits`) would — `history.test.mjs`
+   says so.
 
 ## Verifying a change
 
@@ -89,7 +103,8 @@ npm pack --dry-run        # the tarball carries bin/, README, CHANGELOG, LICENSE
 `check` validates `package.json` (name, version, engines, no runtime dependency,
 repository), the CHANGELOG (`[Unreleased]`, a section for the version, Breaking entries
 first), the README's load-bearing statements ("never sends" and the `allowPaths`
-sentence), `release.yml`, `.disclosegate.json`, and turns the path rule and an address
+sentence), `release.yml`, `.disclosegate.json`, `.pre-commit-hooks.yaml` (pre-push stage,
+the `--pre-commit` entry, `pass_filenames: false`, `always_run: true`), and turns the path rule and an address
 rule on every tracked file except `test/rules.test.mjs`. With a user file present it also
 turns your own terms and blocked domains on the tree, masked. Extend it whenever you add
 an invariant.

@@ -67,6 +67,23 @@ export function scanTree(root, files, { terms = [] } = {}) {
   return failures
 }
 
+// The pre-commit framework's hook definition: a pre-push stage hook that calls the
+// --pre-commit entry, runs on every push (always_run — a commit that changes no file
+// can still carry an address) and is handed no file names. Read as text: no YAML
+// parser, no dependency.
+export function preCommitHooksProblems(text) {
+  const want = [
+    'id: disclosegate',
+    'entry: disclosegate pre-push --pre-commit',
+    'language: node',
+    'stages: [pre-push]',
+    'pass_filenames: false',
+    'always_run: true',
+  ]
+  const lines = String(text).split('\n').map((l) => l.replace(/^\s*-?\s*/, '').trim())
+  return want.filter((w) => !lines.includes(w)).map((w) => `.pre-commit-hooks.yaml: must carry \`${w}\``)
+}
+
 export function check(root, env = process.env) {
   const failures = []
   const fail = (m) => failures.push(m)
@@ -104,6 +121,8 @@ export function check(root, env = process.env) {
   const release = read('.github/workflows/release.yml')
   if (!release.includes('scripts/release-notes.mjs')) fail('release.yml: the notes must open with the CHANGELOG section (scripts/release-notes.mjs)')
   if (!release.includes("'disclosegate--v*'")) fail("release.yml: must trigger on tags 'disclosegate--v*'")
+
+  for (const p of preCommitHooksProblems(read('.pre-commit-hooks.yaml'))) fail(p)
 
   try {
     const own = JSON.parse(read('.disclosegate.json'))

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // disclosegate — a pre-push guard against publishing internal detail.
 //
-//   disclosegate pre-push <remote> <url>     the git hook: ref lines on stdin, as git sends them
+//   disclosegate pre-push <remote> <url> | --pre-commit   the git hook: ref lines on stdin — or pre-commit's PRE_COMMIT_* variables
 //   disclosegate scan [--range A..B | --staged | --history] [--json] [--show]  the same rules, by hand
 //   disclosegate install [--force]           write the pre-push hook, never over another tool's
 //   disclosegate uninstall                   remove the hook, only if disclosegate wrote it
@@ -17,10 +17,10 @@ import { fileURLToPath } from 'node:url'
 import { check } from './lib/check.mjs'
 import { ConfigError, inside, loadConfig, remoteVerdict, TEMPLATE, tildify, userConfigPath } from './lib/config.mjs'
 import { doctor } from './lib/doctor.mjs'
-import { allTags, commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit, tagsAt } from './lib/git.mjs'
+import { allTags, commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit, streamCommits, tagsAt } from './lib/git.mjs'
 import { hooksDir, install, uninstall } from './lib/hook.mjs'
 import { formatText, toJSON } from './lib/report.mjs'
-import { scanCommits } from './lib/rules.mjs'
+import { scanner, scanCommits, sortFindings } from './lib/rules.mjs'
 
 const SCRIPT = fileURLToPath(import.meta.url)
 const ROOT = resolve(dirname(SCRIPT), '..')
@@ -59,18 +59,61 @@ function needRepo(cwd) {
   return root
 }
 
-function report(commits, cfg, warnings, { json, show, context }) {
-  const findings = scanCommits(commits, cfg)
+function report(commits, cfg, warnings, opts) {
+  const tags = commits.filter((c) => c.tag != null).length
+  return reportFindings(scanCommits(commits, cfg), { commits: commits.length - tags, tags }, cfg, warnings, opts)
+}
+
+function reportFindings(findings, { commits, tags }, cfg, warnings, { json, show, context }) {
   const reveal = !!show && !!process.stdout.isTTY
   if (show && !reveal) err('disclosegate: --show prints matches only when stdout is a terminal — masked')
   for (const w of warnings) err(`disclosegate: ${w}`)
-  const tags = commits.filter((c) => c.tag != null).length
-  const opts = { reveal, mode: cfg.mode, context, commits: commits.length - tags, tags, version: VERSION, warnings }
+  const opts = { reveal, mode: cfg.mode, context, commits, tags, version: VERSION, warnings }
   out(json ? toJSON(findings, opts) : formatText(findings, opts))
   return findings.length && cfg.mode === 'block' ? 1 : 0
 }
 
+// Under the pre-commit framework, whose pre-push stage has read git's stdin itself and
+// passes one ref — the first that sends anything — as PRE_COMMIT_* variables:
+// FROM_REF..TO_REF, or only LOCAL_BRANCH when the branch starts at a root commit, where
+// everything no ref of the remote has is read, as the git hook reads a new branch.
+// Anything missing is a usage error, so the push is refused rather than unchecked.
+function preCommitPush(args, cwd) {
+  const rest = args.filter((a) => a !== '--json')
+  if (rest.length) throw new UsageError('pre-push --pre-commit takes no file names — the hook needs pass_filenames: false, as .pre-commit-hooks.yaml sets it')
+  const env = process.env
+  const name = env.PRE_COMMIT_REMOTE_NAME
+  const url = env.PRE_COMMIT_REMOTE_URL
+  if (!name || !url) throw new UsageError('pre-push --pre-commit reads PRE_COMMIT_REMOTE_NAME and PRE_COMMIT_REMOTE_URL, which pre-commit sets in its pre-push stage — run it from there, or install the git hook with `disclosegate install`')
+  const from = env.PRE_COMMIT_FROM_REF
+  const to = env.PRE_COMMIT_TO_REF
+  const local = env.PRE_COMMIT_LOCAL_BRANCH
+  const rev = (v) => {
+    if (v.startsWith('-')) throw new UsageError('a PRE_COMMIT_* revision cannot begin with "-"')
+    return v
+  }
+  let revs
+  let tip
+  if (from && to) {
+    revs = [`${rev(from)}..${rev(to)}`]
+    tip = to
+  } else if (local) {
+    revs = [rev(local), '--not', `--remotes=${name}`]
+    tip = local
+  } else throw new UsageError('pre-push --pre-commit needs PRE_COMMIT_FROM_REF and PRE_COMMIT_TO_REF, or PRE_COMMIT_LOCAL_BRANCH — none is set')
+  const root = needRepo(cwd)
+  const { effective, warnings } = loadConfig({ repoRoot: root })
+  const v = remoteVerdict(url, effective.remotes)
+  if (!v.enforce) {
+    err(`disclosegate: remote ${name} is not enforced (${v.reason}) — not checked`)
+    return 0
+  }
+  const commits = [...logCommits(cwd, revs), ...tagsAt(cwd, [tip])]
+  return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
+}
+
 function prePush(args, cwd) {
+  if (args.includes('--pre-commit')) return preCommitPush(args.filter((a) => a !== '--pre-commit'), cwd)
   const [remoteName, remoteUrl, ...rest] = args.filter((a) => a !== '--json')
   if (!remoteName || !remoteUrl || rest.length) throw new UsageError('pre-push <remote-name> <remote-url> — git passes both; the ref lines come on stdin')
   if (process.stdin.isTTY) throw new UsageError('pre-push reads the ref lines git writes on stdin — by hand, run `disclosegate scan`')
@@ -86,14 +129,29 @@ function prePush(args, cwd) {
   return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
 }
 
+// The whole history, streamed: each commit goes through the rules as git writes it and
+// only its findings are kept, so a repository of any size is read in the memory of its
+// largest commit. The annotated tags follow, read as before. Same findings, same order,
+// same output as reading it all first.
+async function scanHistory(cwd, cfg, warnings, opts) {
+  const scan = scanner(cfg)
+  const findings = []
+  let ci = 0
+  for await (const c of streamCommits(cwd, ['--all'])) for (const f of scan(c, ci++)) findings.push(f)
+  const commits = ci
+  const tags = allTags(cwd)
+  for (const t of tags) for (const f of scan(t, ci++)) findings.push(f)
+  return reportFindings(sortFindings(findings), { commits, tags: tags.length }, cfg, warnings, opts)
+}
+
 function scan(args, cwd) {
   const flags = parseFlags(args, ['--range', '--staged', '--history', '--json', '--show'])
   if ([flags.range, flags.staged, flags.history].filter(Boolean).length > 1) throw new UsageError('pick one of --range, --staged, --history')
   const root = needRepo(cwd)
   const { effective, warnings } = loadConfig({ repoRoot: root })
+  if (flags.history) return scanHistory(cwd, effective, warnings, { json: flags.json, show: flags.show, context: 'scan' })
   let commits
   if (flags.staged) commits = [stagedCommit(cwd)]
-  else if (flags.history) commits = [...logCommits(cwd, ['--all']), ...allTags(cwd)]
   else if (flags.range) commits = logCommits(cwd, [flags.range])
   else {
     const revs = defaultRevs(cwd)
@@ -111,7 +169,7 @@ function doInstall(args, cwd) {
     err(`disclosegate: ${tildify(r.file)}: ${r.message}`)
     return 2
   }
-  if (r.moved) out(`disclosegate: moved the existing hook to ${tildify(r.moved)} — it no longer runs`)
+  if (r.moved) out(`disclosegate: moved the existing hook to ${tildify(r.moved)} — it runs after disclosegate, when a push passes`)
   out(`disclosegate: ${r.updated ? 'updated' : 'installed'} ${tildify(r.file)}`)
   return 0
 }
@@ -206,7 +264,7 @@ function main(argv) {
 
 let code
 try {
-  code = main(process.argv.slice(2))
+  code = await main(process.argv.slice(2))
 } catch (e) {
   if (e instanceof UsageError || e instanceof ConfigError || e instanceof GitError) {
     err(`disclosegate: ${e.message}`)

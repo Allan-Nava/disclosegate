@@ -5,6 +5,27 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+### Added
+- `.pre-commit-hooks.yaml`: the pre-commit framework can run disclosegate as a `pre-push`
+  stage hook (pre-commit 3.2 or later). Its entry, `disclosegate pre-push --pre-commit`,
+  reads the ref pre-commit passes in `PRE_COMMIT_*` variables, since pre-commit has read
+  git's stdin itself; a missing variable or a file name is a usage error that refuses the
+  push. pre-commit passes only the first ref that sends anything, so the README says
+  where the git hook reads more; `check` holds the definition's load-bearing keys (DG-24).
+
+### Changed
+- `scan --history` streams the log: each commit goes through the rules as git writes it
+  and only its findings are kept, so the history is never in memory whole — and no longer
+  limited by the 1 GiB buffer the collected read had. The output, the masking and the
+  exit codes are those of the collected reading, held to it by a test on a fixture
+  repository; on a synthetic 4,000-commit history the peak resident memory fell from
+  1.1 GB to 209 MB (DG-22).
+- A pre-push hook that `install --force` moved aside keeps running: the hook script runs
+  it after disclosegate passes the push, with the same arguments and the same stdin, and
+  its exit code counts — either can refuse the push; one disclosegate refuses never
+  reaches it. `doctor` reports the chain, and `uninstall` still restores the hook. A hook
+  written by 0.0.3 or earlier chains once `disclosegate install` updates it (DG-21).
+
 ## [0.0.3] — 2026-10-03
 
 0.0.3 adds DG-18, DG-19 and DG-20 and moves the backlog tooling to backlogsync; 0.1.0
