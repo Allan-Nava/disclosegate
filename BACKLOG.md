@@ -159,7 +159,7 @@ and rates are published, the matches are not.
   it, and on a pass runs `pre-push.before-disclosegate` with the same stdin and arguments,
   its exit code the hook's; real pushes show it running after a clean push (from a
   subdirectory, and under `core.hooksPath`), refusing one, and never reached by a refused
-  one; `doctor` reports the chain. <!-- dg: prio=low size=S labels=hook,enhancement ver=main -->
+  one; `doctor` reports the chain. <!-- dg: prio=low size=S labels=hook,enhancement ver=0.0.4 -->
 - [x] **DG-22 — Stream `--history`**: the log is read into memory whole; on a large
   repository read it as a stream. Done 2026-10-03: `streamCommits` spawns the same pinned
   `git log` and `splitLog` hands over each commit when the next begins; `scan --history`
@@ -167,7 +167,7 @@ and rates are published, the matches are not.
   output, stderr and exit code, block and audit, to the collected reading on a fixture
   repository, and the splitter to `parseLog` split at every byte; 0.0.3 and the stream
   printed the same on two real histories and a synthetic 4,000-commit one (peak RSS
-  1.1 GB → 209 MB). <!-- dg: prio=low size=S labels=enhancement ver=main -->
+  1.1 GB → 209 MB). <!-- dg: prio=low size=S labels=enhancement ver=0.0.4 -->
 - [ ] **DG-23 — The social card**: render `assets/social-preview.png` from
   `assets/social-preview.html` with headless Chrome and name it in the page's
   `og:image`. <!-- dg: prio=low size=S labels=docs -->
@@ -178,7 +178,7 @@ and rates are published, the matches are not.
   and passes the first ref only, per its `hook_impl.py` source; tests cover the variables,
   a tag at `TO_REF`, enforcement, audit mode, the fail-closed cases and a real push through
   a caller modelled on pre-commit's. pre-commit itself was not installed, so it never ran.
-  <!-- dg: prio=low size=S labels=hook,enhancement ver=main -->
+  <!-- dg: prio=low size=S labels=hook,enhancement ver=0.0.4 -->
 - [x] **DG-29 — A control byte in a line splits the log**: `parseLog` and `splitLog` cut
   the log at every `\x01`, and git prints a file holding that byte (but no NUL) as text,
   so an added line containing it splits one commit in two — the lines after it in that
@@ -195,7 +195,7 @@ and rates are published, the matches are not.
   framing, on every path (hook, real push, `--range`, `--history`, `--pre-commit`);
   readings identical to 0.0.3 on six real histories and three synthetic ones; `scan
   --history` on a synthetic 4,000 commits as fast as before, where one `git show` per
-  commit would take 44 s. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
+  commit would take 44 s. <!-- dg: prio=med size=S labels=rules,hook ver=0.0.4 -->
 - [x] **DG-30 — A `-diff` attribute hides a file's lines**: a `.gitattributes` in the
   working tree that marks a path `-diff` or `binary` (lock files often are) makes
   `git log -p` print `Binary files … differ` for it, so its added lines are never read —
@@ -212,7 +212,7 @@ and rates are published, the matches are not.
   either being a new `unread` finding. The hook, `--pre-commit` and `scan` stream like
   `--history`. Tests on every path, each shown failing before the fix; same output on
   six real histories; a synthetic one with 336 MiB of random `-diff` blobs takes 5.5 s
-  against 0.16 s. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
+  against 0.16 s. <!-- dg: prio=med size=S labels=rules,hook ver=0.0.4 -->
 - [x] **DG-31 — A long run of letters makes the address rule quadratic**: `TEXT_EMAIL` in
   `bin/lib/rules.mjs` starts a match at every character of a run of `[A-Za-z0-9._%+-]`
   and backtracks to its end looking for `@`, so a line of n such characters costs n²/2
@@ -233,7 +233,7 @@ and rates are published, the matches are not.
   a child process with a hard stop, each shown failing or killed on main: 25k/50k/100k
   letters 8.5 s → 0.12 s, a 5.3 MB base64url line killed at 300 s → 0.15 s. A `/regex/`
   term stays the user's — documented in a new README Limits section, with LFS (DG-32).
-  <!-- dg: prio=med size=S labels=rules ver=main -->
+  <!-- dg: prio=med size=S labels=rules ver=0.0.4 -->
 - [ ] **DG-32 — Git LFS content is not read**: a file tracked by Git LFS is a pointer in
   the commit, and its content goes to the LFS server through git-lfs's own pre-push
   hook, beside the push disclosegate reads — so a work address in an LFS-tracked file
@@ -267,4 +267,4 @@ and rates are published, the matches are not.
   runs first. A link at the path is refused as one and nothing is written through it — a
   test shown failing on main, where a dangling link was written through. The CLI tests read
   a file's text and mode through one descriptor, and a file that may be absent through
-  one read that handles `ENOENT`. <!-- dg: prio=med size=S labels=config,tests ver=main -->
+  one read that handles `ENOENT`. <!-- dg: prio=med size=S labels=config,tests ver=0.0.4 -->
