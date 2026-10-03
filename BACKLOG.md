@@ -8,7 +8,7 @@ it one way, on every push to `main` that touches it. Ticking an item ships it; c
 an issue on GitHub changes nothing.
 
 Labels: `rules`, `hook`, `config`, `release`, `docs`, `project`, `tests`, `enhancement`.
-A shipped item that is on `main` but in no release yet carries `ver=0.0.2`; the release
+A shipped item that is on `main` but in no release yet carries `ver=main`; the release
 that ships it turns that into its version.
 
 ## v0.0.1 — The guard, test-first <!-- ms: phase=now -->
@@ -88,15 +88,16 @@ and rates are published, the matches are not.
   becomes a unit test in `test/rules.test.mjs` first, then a rule change; a class that
   cannot be fixed without missing a true finding is documented instead.
   <!-- dg: prio=high size=M labels=rules,tests -->
-- [ ] **DG-16 — First publish, by hand**: npm cannot bind a trusted publisher to a
+- [x] **DG-16 — First publish, by hand**: npm cannot bind a trusted publisher to a
   package that does not exist, so the first version on npm is 0.0.2, published by hand —
   decided 2026-10-01 — with `npm publish --access public` from a clean checkout of `main`
   at the merged release commit; then the trusted publisher is configured and the tag
   `disclosegate--v0.0.2` pushed, which `release.yml` releases without publishing again.
   From 0.1.0 on every version publishes from CI. The audit-week gate (DG-14) is
   unchanged. Open until the maintainer has published 0.0.2 and configured the trusted
-  publisher — the maintainer ticks it then, with the date.
-  <!-- dg: prio=high size=S labels=release -->
+  publisher — the maintainer ticks it then, with the date. Done 2026-10-03: 0.0.2 published by hand on 2026-10-01;
+  the trusted publisher is confirmed by 0.0.3, which `release.yml` published over OIDC.
+  <!-- dg: prio=high size=S labels=release ver=0.0.2 -->
 - [ ] **DG-17 — Switch to block**: after the week, `"mode": "block"` on the maintainer's
   machine; the README status line says when. <!-- dg: prio=med size=S labels=docs -->
 
