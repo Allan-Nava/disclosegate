@@ -11,7 +11,7 @@ the push** when it finds what your own rule says must not be public. It checks *
 because after is too late: once a commit is on a forge it stays reachable by its SHA even
 when a force-push has removed it from every branch.
 
-> **Status: 0.0.3, on npm — run it in `audit` mode.** The hook, the four rules, the
+> **Status: 0.0.4, on npm — run it in `audit` mode.** The hook, the four rules, the
 > config with its trust order, `scan`, `install`, `init`, `doctor` and `check` are
 > written and covered by tests that run real `git push` commands against a bare remote.
 > What is still missing is evidence from real work: the false-positive rate on real

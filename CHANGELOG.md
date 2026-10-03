@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+## [0.0.4] — 2026-10-03
+
+0.0.4 is a security release (DG-29 forged commit framing, DG-30 binary and `-diff` content
+unread, DG-31 quadratic rules) that also adds DG-21, DG-22, DG-24 and DG-34; 0.1.0 still
+waits on the audit week (DG-14).
+
 ### Added
 - `.pre-commit-hooks.yaml`: the pre-commit framework can run disclosegate as a `pre-push`
   stage hook (pre-commit 3.2 or later). Its entry, `disclosegate pre-push --pre-commit`,
