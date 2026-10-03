@@ -53,8 +53,8 @@ Releases run from GitHub Actions; pushing the tag is the manual step, and
 **One-time bootstrap — 0.0.2, published by hand.** No npm token lives here; the
 release job authenticates over OIDC (npm Trusted Publishing). npm cannot configure a
 trusted publisher for a package that does not exist, so the first version on npm —
-0.0.2, decided 2026-10-01 (DG-16) — is published by hand, and from 0.1.0 on every
-version releases from CI. The audit-week gate on 0.1.0 (DG-14) does not move. In this
+0.0.2, decided 2026-10-01 (DG-16) — is published by hand, and every later version
+releases from CI — 0.0.3 was the first, 2026-10-03. The audit-week gate on 0.1.0 (DG-14) does not move. In this
 order, after the release pull request has merged:
 
 ```bash
