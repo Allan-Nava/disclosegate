@@ -268,3 +268,11 @@ and rates are published, the matches are not.
   test shown failing on main, where a dangling link was written through. The CLI tests read
   a file's text and mode through one descriptor, and a file that may be absent through
   one read that handles `ENOENT`. <!-- dg: prio=med size=S labels=config,tests ver=0.0.4 -->
+- [ ] **DG-35 — The hook installer and the config loader still check, then use**: DG-34 made
+  `init` atomic, but `bin/lib/hook.mjs` (the hook's state at :67, the moved-aside hook at :78,
+  the backup at :95) and `bin/lib/config.mjs` (the user and repository files at :140 and :150)
+  still ask `existsSync` and then act on the path, so a file swapped in between is acted on
+  unchecked. CodeQL does not flag them today; DG-34's agent saw them in passing. Replace each
+  with one operation that handles `ENOENT` (or `'wx'` / `lstat` where a link must be refused),
+  keeping DG-21's chaining and DG-25's refusals, with a test per site where it is observable.
+  <!-- dg: prio=med size=S labels=hook,config -->
