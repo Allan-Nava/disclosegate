@@ -11,7 +11,7 @@
 //
 // Exit codes: 0 clean (or audit mode), 1 findings in block mode, 2 usage or config error.
 // Nothing here opens a network connection: it reads git and two files, and prints.
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { closeSync, lstatSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { check } from './lib/check.mjs'
@@ -181,19 +181,39 @@ function doUninstall(args, cwd) {
   return 0
 }
 
+const isLink = (p) => {
+  try {
+    return lstatSync(p).isSymbolicLink()
+  } catch {
+    return false
+  }
+}
+
 function init(args, cwd) {
   parseFlags(args, [])
   const file = userConfigPath()
-  if (existsSync(file)) {
-    err(`disclosegate: ${tildify(file)} already exists — left alone`)
-    return 2
-  }
   const root = repoRoot(cwd)
   if (root && inside(file, root)) {
     err(`disclosegate: ${tildify(file)} is inside this repository — the user config must never live in one`)
     return 2
   }
-  writeFileSync(file, TEMPLATE, { mode: 0o600 })
+  // One call creates the file or fails, so nothing can come between a check and the
+  // write (DG-34). 'wx' is O_CREAT | O_EXCL: it never opens a file that exists and never
+  // follows a link at the path, dangling or not — a link planted after the check above
+  // cannot carry the write into a repository. What it refused is only described after.
+  let fd
+  try {
+    fd = openSync(file, 'wx', 0o600)
+  } catch (e) {
+    if (e.code !== 'EEXIST') throw e
+    err(`disclosegate: ${tildify(file)} ${isLink(file) ? 'is a symbolic link' : 'already exists'} — left alone`)
+    return 2
+  }
+  try {
+    writeFileSync(fd, TEMPLATE)
+  } finally {
+    closeSync(fd)
+  }
   out(`disclosegate: wrote ${tildify(file)} — every value in it is a placeholder; replace them, then run \`disclosegate doctor\``)
   return 0
 }

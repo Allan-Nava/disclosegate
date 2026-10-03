@@ -253,3 +253,18 @@ and rates are published, the matches are not.
   it on a real verbatim commit. Changes findings, so it was kept out of DG-31, whose
   results had to stay byte-identical. Found during DG-31.
   <!-- dg: prio=med size=S labels=rules -->
+- [x] **DG-34 — `init` checks for the user file, then writes it**: CodeQL's
+  `js/file-system-race`, alerts 2 and 3, 2026-10-03. `init` in `bin/disclosegate.mjs`
+  asked `existsSync` whether the user file was there and then called `writeFileSync`,
+  which follows a link: a link put at the path between the two — or a dangling one
+  already there that points outside the repository, which `existsSync` reports absent —
+  took the write wherever it pointed. `test/cli.test.mjs` stat-ed the installed hook and
+  read it later through the path. Create the file in one call that fails if anything is
+  there, and read the hook's text and mode through one descriptor. Done 2026-10-03: `init`
+  opens the user file with `'wx'` (`O_CREAT | O_EXCL`), which never opens an existing file
+  and never follows a link at the path, dangling or not, and writes the template through
+  that descriptor; the check that the path is not inside the repository (DG-25) still
+  runs first. A link at the path is refused as one and nothing is written through it — a
+  test shown failing on main, where a dangling link was written through. The CLI tests read
+  a file's text and mode through one descriptor, and a file that may be absent through
+  one read that handles `ENOENT`. <!-- dg: prio=med size=S labels=config,tests ver=main -->
