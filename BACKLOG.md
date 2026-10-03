@@ -236,14 +236,18 @@ and rates are published, the matches are not.
   letters 8.5 s → 0.12 s, a 5.3 MB base64url line killed at 300 s → 0.15 s. A `/regex/`
   term stays the user's — documented in a new README Limits section, with LFS (DG-32).
   <!-- dg: prio=med size=S labels=rules ver=0.0.4 -->
-- [ ] **DG-32 — Git LFS content is not read**: a file tracked by Git LFS is a pointer in
+- [x] **DG-32 — Git LFS content is not read**: a file tracked by Git LFS is a pointer in
   the commit, and its content goes to the LFS server through git-lfs's own pre-push
   hook, beside the push disclosegate reads — so a work address in an LFS-tracked file
   reaches the forge's LFS store unread, and `unread` does not name it either. Read the
   objects `git lfs pre-push` would upload (`git lfs ls-files` over the pushed range, the
   local `.git/lfs/objects`), or at least report each pointer as `unread`; and check that
   the chained-hook order lets disclosegate run before git-lfs uploads. Found during DG-30.
-  The README's Limits section states it meanwhile. <!-- dg: prio=med size=M labels=rules,hook -->
+  The README's Limits section states it meanwhile. Done 2026-10-03: `lfsContent` in
+  `bin/lib/git.mjs` reads each changed pointer's object from the local store as the file's
+  lines, on every path (push, `--range`, `--history`, `--staged`); a missing object is
+  `unread`; a real git-lfs push, chained after disclosegate, uploads nothing on a refusal.
+  <!-- dg: prio=med size=M labels=rules,hook ver=main -->
 - [x] **DG-33 — A trailer that ends in a CR is not read as a trailer**: `trailers()` in
   `bin/lib/rules.mjs` takes a line as `Token: value` only when `.*$` reaches its end, and
   `.` stops at a CR, so a message kept with CRLF line endings (`git commit

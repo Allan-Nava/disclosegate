@@ -198,6 +198,16 @@ diff ignores `--text`, are read through one diff per parent. What a binary holds
 compressed — a zip entry, a PDF stream, a PNG text chunk — is bytes to the rules, not
 text.
 
+**A Git LFS file is read as its content, not its pointer.** The commit holds a pointer;
+the content goes to the forge's LFS store through git-lfs's own pre-push hook. disclosegate
+reads that content from where git-lfs reads it, the repository's local LFS object store,
+as the file's lines, through every rule — and `install --force` chains git-lfs's hook
+after its own, so a refused push uploads nothing to the LFS store either. Install git-lfs's
+hooks first, then `disclosegate install --force`; `git lfs update --force` afterwards would
+put git-lfs's hook back in disclosegate's place, which `disclosegate doctor` shows. Content
+that is not on this machine is an `unread` finding: git-lfs could not upload it either, but
+the guard cannot vouch for it.
+
 One finding is about the reading itself rather than a rule: **`unread`**. A file's added
 lines are read up to 100 MiB in one commit — the size GitHub refuses a file at — and a
 commit's up to 512 MiB in all, so a commit of large binaries costs bounded time and
@@ -247,10 +257,10 @@ ones: a synthetic history with 336 MiB of random blobs under `-diff` takes 5.5 s
 
 ## Limits
 
-- **Git LFS content is not read.** A file tracked by Git LFS is a pointer in the commit,
-  and the pointer is what disclosegate reads. The content goes to the forge's LFS store
-  through git-lfs's own pre-push hook, beside the push and unread: an address inside an
-  LFS-tracked file reaches that store, and no `unread` finding names the file (DG-32).
+- **Git LFS content must be on this machine to be read.** It is read from the local LFS
+  object store; content that is not there — older versions in a clone that fetched only
+  the current ones — is an `unread` finding, so `scan --history` over such a clone names
+  each. Run `git lfs fetch --all` first.
 - **What a binary holds compressed** — a zip entry, a PDF stream, a PNG text chunk — is
   bytes to the rules, not text.
 - **A file past the read limits** is read up to there and reported as `unread`, never

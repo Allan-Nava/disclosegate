@@ -23,7 +23,12 @@
 // added text is read up to `READ_LIMIT` bytes in a commit, and a commit's up to
 // `COMMIT_LIMIT`. What lies past either is consumed for the framing, not decoded, and
 // its file is reported `unread` — never dropped quietly.
+//
+// A file tracked by Git LFS is read as its content, not its pointer (DG-32): see
+// `lfsContent`.
 import { spawn, spawnSync } from 'node:child_process'
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
 export class GitError extends Error {}
 
@@ -447,7 +452,101 @@ function commitOf(cwd, p, o) {
     if (!c.files.includes(path)) c.files = [...c.files, path]
     for (const u of own.unread) if (!c.unread.some((x) => x.file === u.file)) c.unread = [...c.unread, u]
   }
-  return c
+  return lfsContent(cwd, p.sha, c, COMMIT_LIMIT - read)
+}
+
+// --- Git LFS -----------------------------------------------------------------
+//
+// A file tracked by Git LFS is a pointer in the commit, and its content goes to the
+// forge's LFS store through git-lfs's own pre-push hook. `install --force` moves that
+// hook aside and chains it after disclosegate's, so a refused push uploads nothing; what
+// is left is to read the content the hook would upload. It is read where git-lfs reads
+// it, the repository's local object store, as the file's lines from line 1, against the
+// same budgets as an added line. Content that is not on this machine is `unread` — the
+// guard cannot vouch for it — and a line that only looks like a pointer's is left alone:
+// the blob at the path must be a whole pointer.
+const LFS_OID = /^oid sha256:([0-9a-f]{64})$/
+const LFS_VERSION = /^version https:\/\/(?:git-lfs\.github\.com|hawser\.github\.com)\/spec\/v1$/
+const LFS_POINTER_MAX = 1024
+
+// `{ oid, size }` of a pointer file's text, or null: the version line first, then an
+// `oid sha256:` and a `size` line, under 1024 bytes, as the specification has it.
+export function lfsPointer(text) {
+  const s = String(text)
+  if (Buffer.byteLength(s) > LFS_POINTER_MAX) return null
+  const lines = s.split('\n')
+  if (!LFS_VERSION.test(lines[0])) return null
+  const oid = lines.map((l) => l.match(LFS_OID)).find(Boolean)
+  const size = lines.find((l) => /^size [0-9]+$/.test(l))
+  return oid && size ? { oid: oid[1], size: Number(size.slice(5)) } : null
+}
+
+// `<common git dir>/lfs/objects`, or under `lfs.storage` when it is set — relative to
+// the git dir, as git-lfs takes it.
+const stores = new Map()
+function lfsObjects(cwd) {
+  if (!stores.has(cwd)) {
+    const dir = git(['rev-parse', '--git-common-dir'], { cwd })
+    if (!dir.ok) throw new GitError(`git rev-parse failed: ${dir.err.trim().split('\n')[0]}`)
+    const common = resolve(cwd, dir.out.trim())
+    const set = git(['config', '--get', 'lfs.storage'], { cwd })
+    stores.set(cwd, join(set.ok && set.out.trim() ? resolve(common, set.out.trim()) : join(common, 'lfs'), 'objects'))
+  }
+  return stores.get(cwd)
+}
+
+// A file's first `max` bytes through one descriptor, and whether that was all of it.
+function head(file, max) {
+  const fd = openSync(file, 'r')
+  try {
+    const size = fstatSync(fd).size
+    const buf = Buffer.alloc(Math.max(0, Math.min(size, max)))
+    let n = 0
+    while (n < buf.length) {
+      const got = readSync(fd, buf, n, buf.length - n, n)
+      if (!got) break
+      n += got
+    }
+    return { buf: buf.subarray(0, n), whole: n >= size }
+  } finally {
+    closeSync(fd)
+  }
+}
+
+// `c` with the content of every LFS file it changes added as that file's lines. `rev` is
+// the commit, or '' for the index; `left` is what the commit's budget still holds.
+export function lfsContent(cwd, rev, c, left) {
+  const candidates = [...new Set(c.added.filter((a) => a.text.length === 75 && LFS_OID.test(a.text)).map((a) => a.file))]
+  if (!candidates.length) return c
+  const added = [...c.added]
+  const unread = [...c.unread]
+  const miss = (file, why) => {
+    if (!unread.some((u) => u.file === file)) unread.push({ file, why })
+  }
+  for (const file of candidates) {
+    const blob = gitBytes(['cat-file', 'blob', rev ? `${rev}:${file}` : `:0:${file}`], { cwd })
+    if (!blob.ok) throw new GitError(`git cat-file could not read ${file} — refusing rather than reading less`)
+    const pointer = blob.out.length <= LFS_POINTER_MAX && lfsPointer(blob.out.toString('utf8'))
+    if (!pointer) continue
+    let got
+    try {
+      got = head(join(lfsObjects(cwd), pointer.oid.slice(0, 2), pointer.oid.slice(2, 4), pointer.oid), Math.min(READ_LIMIT, left))
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw e
+      miss(file, 'lfs')
+      continue
+    }
+    let line = 0
+    for (let i = 0; i < got.buf.length; ) {
+      const nl = got.buf.indexOf(10, i)
+      const end = nl === -1 ? got.buf.length : nl
+      added.push({ file, line: ++line, text: got.buf.toString('utf8', i, end) })
+      i = end + 1
+    }
+    left -= got.buf.length
+    if (!got.whole) miss(file, 'limit')
+  }
+  return { ...c, added, unread }
 }
 
 // git's output as bytes: a line of a binary file is not UTF-8, and a log of large files
@@ -698,7 +797,8 @@ export function stagedCommit(cwd) {
   const r = gitBytes(['diff', '--cached', '-p', ...DIFF, '--'], { cwd })
   if (!r.ok) throw new GitError(`git diff --cached failed: ${r.err.trim().split('\n')[0]}`)
   const { added, files, unread } = parsePatch(r.out)
-  return { sha: 'staged', author: ident(cwd, 'GIT_AUTHOR_IDENT'), committer: ident(cwd, 'GIT_COMMITTER_IDENT'), message: '', added, files, unread }
+  const c = { sha: 'staged', author: ident(cwd, 'GIT_AUTHOR_IDENT'), committer: ident(cwd, 'GIT_COMMITTER_IDENT'), message: '', added, files, unread }
+  return lfsContent(cwd, '', c, COMMIT_LIMIT - added.reduce((n, a) => n + Buffer.byteLength(a.text), 0))
 }
 
 // `scan` with no range: what a plain `git push` would most likely send.
