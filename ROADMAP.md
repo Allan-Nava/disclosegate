@@ -4,7 +4,7 @@
 
 > This page is **generated** from [BACKLOG.md](BACKLOG.md), the single source of truth for planned work. Regenerate it with `npm run roadmap` after editing the backlog — CI fails when the two disagree.
 
-**35 items · 30 shipped · 5 open · 3 milestones.**
+**35 items · 31 shipped · 4 open · 3 milestones.**
 
 ## At a glance
 
@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | **v0.0.1 — The guard, test-first** | now | `##########` 100% | 0 | 13 |
 | **v0.1.0 — A week in audit mode** | next | `######....` 63% | 3 | 5 |
-| **v0.2.0 — What the first version does not read** | later | `#########.` 86% | 2 | 12 |
+| **v0.2.0 — What the first version does not read** | later | `#########.` 93% | 1 | 13 |
 
 ## v0.0.1 — The guard, test-first
 
@@ -48,7 +48,7 @@
 - [x] **DG-20** — blockedDomains in text · med · S · rules · `0.0.3`
 - [x] **DG-21** — Chain a moved-aside hook · low · S · hook, enhancement · `0.0.4`
 - [x] **DG-22** — Stream `--history` · low · S · enhancement · `0.0.4`
-- [ ] **DG-23** — The social card · low · S · docs
+- [x] **DG-23** — The social card · low · S · docs · `main`
 - [x] **DG-24** — A `pre-commit` framework definition · low · S · hook, enhancement · `0.0.4`
 - [x] **DG-29** — A control byte in a line splits the log · med · S · rules, hook · `0.0.4`
 - [x] **DG-30** — A `-diff` attribute hides a file's lines · med · S · rules, hook · `0.0.4`

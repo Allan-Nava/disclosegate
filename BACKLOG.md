@@ -168,9 +168,11 @@ and rates are published, the matches are not.
   repository, and the splitter to `parseLog` split at every byte; 0.0.3 and the stream
   printed the same on two real histories and a synthetic 4,000-commit one (peak RSS
   1.1 GB → 209 MB). <!-- dg: prio=low size=S labels=enhancement ver=0.0.4 -->
-- [ ] **DG-23 — The social card**: render `assets/social-preview.png` from
+- [x] **DG-23 — The social card**: render `assets/social-preview.png` from
   `assets/social-preview.html` with headless Chrome and name it in the page's
-  `og:image`. <!-- dg: prio=low size=S labels=docs -->
+  `og:image`. Done 2026-10-03: the PNG is committed, `site/build.mjs` names it in
+  `og:image` and `twitter:image` (`summary_large_image`), CLAUDE.md has the command.
+  <!-- dg: prio=low size=S labels=docs ver=main -->
 - [x] **DG-24 — A `pre-commit` framework definition**: `.pre-commit-hooks.yaml` with
   `stages: [pre-push]`, for repositories that manage hooks that way. Done 2026-10-03: the
   definition calls `disclosegate pre-push --pre-commit`, which reads `PRE_COMMIT_REMOTE_*`

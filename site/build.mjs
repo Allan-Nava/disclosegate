@@ -208,9 +208,15 @@ const html = `<!doctype html>
 <meta property="og:url" content="${SITE}">
 <meta property="og:title" content="${esc(headline)}">
 <meta property="og:description" content="${esc(description)}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${SITE}assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="${esc(headline)}">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${esc(headline)}">
 <meta name="twitter:description" content="${esc(description)}">
+<meta name="twitter:image" content="${SITE}assets/social-preview.png">
+<meta name="twitter:image:alt" content="${esc(headline)}">
 <link rel="icon" href="${favicon}">
 <link rel="apple-touch-icon" href="assets/logo.svg">
 <script type="application/ld+json">${jsonLd}</script>
