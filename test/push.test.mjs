@@ -231,6 +231,18 @@ test('a user file that is a symlink to a file outside the repository is read as 
   assert.ok(sb.remoteHas('refs/heads/main'))
 })
 
+test('an address at a blocked domain in a message or an added line is refused, masked — allowPaths or not', () => {
+  const sb = guarded({ publicEmails: [ALICE.email], blockedDomains: ['example.internal'] })
+  sb.repoConfig({ allowPaths: ['test/fixtures/**'] })
+  sb.git(['add', '.disclosegate.json'])
+  sb.commit({ file: 'test/fixtures/contact.txt', content: `owner: ${BOB.email}\n`, message: `Ask ${BOB.email} first` })
+  const r = sb.push()
+  assert.notEqual(r.code, 0, r.out)
+  assert.match(r.out, /email\s+[0-9a-f]{7}\s+message\s+bo… \(20 chars\)\s+blocked domain/)
+  assert.match(r.out, /email\s+[0-9a-f]{7}\s+test\/fixtures\/contact\.txt:1\s+bo… \(20 chars\)\s+blocked domain/)
+  assert.doesNotMatch(r.out, /bob@example\.internal/)
+})
+
 // A merge shows no diff under `git log -p`; what it adds itself — a conflict resolved
 // with text neither side had — is only in its combined diff.
 test("a merge's own lines — a conflict resolved with new text — are read", () => {

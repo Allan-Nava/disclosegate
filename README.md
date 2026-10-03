@@ -126,7 +126,7 @@ still runs, and `doctor` says what is missing.
 
 | Rule | Reads | A finding when |
 |---|---|---|
-| `email` | author, committer, tagger, every trailer address (`Co-authored-by:`, `Signed-off-by:`, any `Token: … <address>`) | the address is not in `publicEmails` (off while that list is empty); or its domain, or a parent of it, is in `blockedDomains` — whatever `publicEmails` says |
+| `email` | author, committer, tagger, every trailer address (`Co-authored-by:`, `Signed-off-by:`, any `Token: … <address>`); any address in a commit or tag message or an added line | the address is not in `publicEmails` (off while that list is empty, and never applied to an address in a message or a line); or its domain, or a parent of it, is in `blockedDomains` — whatever `publicEmails` says, wherever the address is |
 | `term` | commit and tag messages, added lines, the names of files with added lines | an entry of `terms` matches: a plain string case-insensitively, `/source/flags` as a regular expression |
 | `path` | commit and tag messages, added lines | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` or a `file:///` URL naming a path. Built in, always on; a URL such as `https://example.com/home/about/` is not a home |
 | `name` | author, committer, tagger and trailer names | the name is in `blockedNames` |

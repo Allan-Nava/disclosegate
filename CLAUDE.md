@@ -5,13 +5,15 @@ Guidance for Claude Code when working in this repository.
 ## What this repo is
 
 `disclosegate` is a **git pre-push hook** and the CLI around it: before a push leaves,
-it reads the commits' metadata and messages, the lines each commit adds and the tagger
-and message of an annotated tag, and refuses the push when they carry internal detail — a
-work address as author, committer, tagger or trailer, a private host, service, repository or client name, a home-directory path, a
-`file:` URL. It is not a secret scanner; gitleaks is, and the README says so. It is
-modelled on its sibling projects: dependency-free, releases by tag over OIDC,
-BACKLOG.md as the single source of truth, the same prose conventions. It is not a
-Claude Code or Codex plugin and has no plugin manifests.
+it reads the commits' metadata and messages, the lines each commit adds — a merge's
+own included — and the tagger and message of an annotated tag, and refuses the push when
+they carry internal detail — a work address as author, committer, tagger or trailer, or
+at a blocked domain anywhere in a message or a line; a private host, service, repository
+or client name; a home-directory path, a `file:` URL. It is not a secret scanner;
+gitleaks is, and the README says so. It is modelled on its sibling projects:
+dependency-free, releases by tag over OIDC, BACKLOG.md as the single source of truth,
+the same prose conventions. It is not a Claude Code or Codex plugin and has no plugin
+manifests.
 
 `thoughts/DG-1-disclosegate/00-brief.md` is the task definition. No QRSPI phase has been
 run on it.

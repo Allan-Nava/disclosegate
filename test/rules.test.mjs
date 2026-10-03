@@ -225,3 +225,26 @@ test("parsePatch: a merge's combined hunks — only a line new to every parent i
   ])
   assert.deepEqual(files, ['x.txt', 'y.txt', 'z.txt', 'w.txt'])
 })
+
+test('blockedDomains: an address at a blocked domain in a message or an added line is a finding', () => {
+  const c = commit({
+    message: 'Ask bob@mail.example.internal\n\nCo-authored-by: Bob <bob@example.internal>\n',
+    added: [
+      { file: 'test/fixtures/a.txt', line: 2, text: 'remote = ssh://git@git.example.internal/group/repo.git' },
+      { file: 'notes.txt', line: 1, text: 'write to dave@example.com or carol@notexample.internal' },
+    ],
+  })
+  const f = scanCommits([c], cfg({ blockedDomains: ['example.internal'], allowPaths: ['test/fixtures/**'] }))
+  assert.deepEqual(kinds(f), ['email/trailer Co-authored-by', 'email/message', 'email/test/fixtures/a.txt:2'], 'a trailer once, allowPaths no exemption')
+  assert.ok(f.every((x) => x.kind === 'blocked domain' && x.rank === 0))
+  assert.deepEqual(f.slice(1).map((x) => x.match), ['bob@mail.example.internal', 'git@git.example.internal'])
+  assert.deepEqual(kinds(scanCommits([c], cfg())), ['email/trailer Co-authored-by'], 'text is read against blockedDomains only, never publicEmails')
+  const t = { sha: 'e'.repeat(40), tag: 'v1', tagger: { name: 'Alice', email: 'alice@personal.example' }, message: 'cc bob@example.internal\n', added: [], files: [] }
+  assert.deepEqual(kinds(scanCommits([t], cfg({ blockedDomains: ['example.internal'] }))), ['email/tag message'])
+})
+
+test('blockedDomains: a trailer address that runs into a path is still at its host', () => {
+  const c = commit({ message: 'x\n\nSee-also: git@git.example.internal/group/repo.git\n' })
+  const f = scanCommits([c], cfg({ publicEmails: [], blockedDomains: ['example.internal'] }))
+  assert.deepEqual(f.map((x) => [x.where, x.match]), [['message', 'git@git.example.internal']])
+})

@@ -146,9 +146,12 @@ and rates are published, the matches are not.
   consumes a combined hunk by its per-parent and result counts and takes a line as added
   only when every parent column is `+`; a conflict resolved with new text is refused in a
   real push, an octopus hunk parses. <!-- dg: prio=med size=M labels=rules,hook ver=main -->
-- [ ] **DG-20 — blockedDomains in text**: an address at a blocked domain in an added
+- [x] **DG-20 — blockedDomains in text**: an address at a blocked domain in an added
   line or a message body (outside a trailer) is a term today only if listed as one;
-  make the domain list apply there too. <!-- dg: prio=med size=S labels=rules -->
+  make the domain list apply there too. Done 2026-10-03: every address in a commit or tag
+  message and in an added line is held to `blockedDomains` — not to `publicEmails` — and
+  found as an `email` / `blocked domain` finding, masked, `allowPaths` no exemption; a
+  trailer's address is read once. <!-- dg: prio=med size=S labels=rules ver=main -->
 - [ ] **DG-21 — Chain a moved-aside hook**: `install --force` moves a foreign pre-push
   hook aside and it stops running; run it after disclosegate with the same stdin
   instead. <!-- dg: prio=low size=S labels=hook,enhancement -->

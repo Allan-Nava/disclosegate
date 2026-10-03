@@ -14,6 +14,11 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   combined hunks by their counts, so a line new to every parent — what resolving a
   conflict writes — goes through the term and path rules; a line one side already had is
   not read twice (DG-19).
+- `blockedDomains` applies in text: an address at a blocked domain in a commit or tag
+  message (outside a trailer, which was already read) or in an added line is an `email`
+  finding, ranked first like any blocked domain — `allowPaths` does not exempt it, and
+  `publicEmails` is never applied there. The domain stops where a host name does, so an
+  SSH remote such as `git@host/group/repo.git` is at its host (DG-20).
 
 ### Changed
 - The backlog check, the roadmap, the issue sync and the release-drift check are
