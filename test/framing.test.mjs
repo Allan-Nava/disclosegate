@@ -32,7 +32,7 @@ function hostile() {
   })
   c.message = sb.commit({ message: `Subject\n\nbody \x01 one \x03 two\x02 after ${HOME_PATH}` })
   c.name = sb.commit({ author: { name: 'Ev\x02il', email: BOB.email }, committer: ALICE, message: 'A separator in a name' })
-  sb.commit({ file: 'bin.dat', content: `\0binary ${HOME_PATH}\n`, message: 'Binary' })
+  c.bin = sb.commit({ file: 'bin.dat', content: `\0binary ${HOME_PATH}\n`, message: 'Binary' })
   c.nul = sb.commit({ file: 'late-nul.txt', content: `${'x'.repeat(9000)}\n\0nul\n${HOME_PATH}\n`, message: 'NUL past the sniff' })
   sb.git(['checkout', '-q', '-b', 'side'])
   sb.commit({ file: 'side.txt', content: 'side\n' })
@@ -86,10 +86,11 @@ test('content that looks like a header is read as content: in a line, in a messa
   assert.equal(msg.message, `Subject\n\nbody \x01 one \x03 two\x02 after ${HOME_PATH}\n`)
 })
 
-test('NUL bytes and binary files read as before: a binary file is not read, a NUL past the sniff is a line', () => {
+// Until DG-30 a binary file was not read at all; it is read as text now, NUL and all.
+test('NUL bytes and binary files: a binary file is read as lines, a NUL past the sniff is a line', () => {
   const { sb, c } = hostile()
   const j = JSON.parse(sb.run(['scan', '--history', '--json']).stdout)
-  assert.ok(!j.findings.some((f) => f.where.startsWith('bin.dat')), 'a binary file has no lines')
+  assert.ok(has(j, 'path', c.bin, 'bin.dat:1'), 'the path in a file git calls binary')
   assert.ok(has(j, 'path', c.nul, 'late-nul.txt:3'), 'the line after a NUL git printed as text')
   const [nul] = logCommits(sb.work, [`${c.nul}^!`])
   assert.deepEqual(nul.added.map((a) => [a.line, a.text.length]), [[1, 9000], [2, 4], [3, HOME_PATH.length]])

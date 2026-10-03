@@ -3,7 +3,9 @@
 // without a repository (test/rules.test.mjs).
 //
 // A commit is { sha, author: {name, email}, committer: {name, email}, message,
-// added: [{ file, line, text }], files: [path, ...] }. An annotated tag has the same
+// added: [{ file, line, text }], files: [path, ...], unread: [{ file, why }] } — `unread`
+// the files whose added lines were not all read: past the read limit (`limit`), or
+// printed by git as binary (`binary`). An annotated tag has the same
 // shape with { tag: <name>, tagger: {name, email} } in place of author and committer,
 // and nothing added. A finding is { sha, short, where, rule, kind, match, rank, tag }.
 
@@ -22,8 +24,12 @@ export const PATH_PATTERNS = [
 ]
 
 // Worst first: an address in the metadata is the identity the forge displays and
-// keeps; a private name is next; a home path or a name says less.
-export const RANK = { 'email:blocked': 0, 'email:unlisted': 1, term: 2, name: 3, path: 4 }
+// keeps; a private name is next; a home path or a name says less. A file not read in
+// full is last: nothing was found in it, but nothing can be said of what was not read.
+export const RANK = { 'email:blocked': 0, 'email:unlisted': 1, term: 2, name: 3, path: 4, unread: 5 }
+
+// What an `unread` finding says, by why.
+export const UNREAD = { limit: 'read in part — past the read limit', binary: 'not read — git printed it as binary' }
 
 // The first two characters, an ellipsis and the length: enough to tell two findings
 // apart, too little to publish the thing itself in a CI log.
@@ -227,6 +233,11 @@ export function scanner(cfg) {
       termsIn(where, a.text, a.file === REPO_FILE)
       domainsIn(where, a.text)
       if (!matchesGlob(a.file, allowPaths)) pathsIn(where, a.text)
+    }
+    // A file whose lines were not all read is a finding of its own: the guard cannot vouch
+    // for what it did not see, and saying so is the user's cue to look.
+    for (const u of c.unread ?? []) {
+      add({ where: secretNames.has(u.file) ? mask(u.file) : u.file, rule: 'unread', kind: UNREAD[u.why] ?? u.why, match: u.file })
     }
     return out
   }

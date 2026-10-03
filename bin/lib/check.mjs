@@ -15,6 +15,16 @@ export const CHECK_EXEMPT = ['test/rules.test.mjs']
 // Load-bearing sentences: the README promises them, and the code is held to them.
 export const NEVER_SENDS = 'never sends'
 export const ALLOW_PATHS_SENTENCE = '`allowPaths` exempts files from the path rule only — never from the email or term rules.'
+export const UNREAD_SENTENCE = 'nothing is skipped without saying so'
+// What every diff must carry so that no file is binary to the reading, and no driver
+// renders one in its place (CLAUDE.md, invariant 9).
+export const DIFF_FLAGS = ['--text', '--no-textconv', '--no-ext-diff']
+
+// The flags of `DIFF` in bin/lib/git.mjs that are missing, of those every diff needs.
+export function missingDiffFlags(source) {
+  const diff = String(source).match(/^const DIFF = \[(.*)\]$/m)?.[1] ?? ''
+  return DIFF_FLAGS.filter((f) => !diff.includes(`'${f}'`))
+}
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g
 const PLACEHOLDER_DOMAIN = /(?:^|\.)(?:example\.(?:com|org|net|internal)|[^.]+\.(?:example|test|invalid|localhost))$|^(?:example|test|invalid|localhost)$/i
@@ -117,6 +127,8 @@ export function check(root, env = process.env) {
   const readme = read('README.md')
   if (!readme.includes(NEVER_SENDS)) fail(`README.md: must state that the tool ${NEVER_SENDS} anything anywhere`)
   if (!readme.includes(ALLOW_PATHS_SENTENCE)) fail(`README.md: must carry the sentence: ${ALLOW_PATHS_SENTENCE}`)
+  if (!readme.includes(UNREAD_SENTENCE)) fail(`README.md: must say of a file not read in full that ${UNREAD_SENTENCE}`)
+  for (const f of missingDiffFlags(read('bin/lib/git.mjs'))) fail(`bin/lib/git.mjs: DIFF must carry ${f} — nothing is binary to the reading, and no driver renders a file in its place`)
 
   const release = read('.github/workflows/release.yml')
   if (!release.includes('scripts/release-notes.mjs')) fail('release.yml: the notes must open with the CHANGELOG section (scripts/release-notes.mjs)')

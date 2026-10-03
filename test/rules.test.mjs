@@ -248,3 +248,15 @@ test('blockedDomains: a trailer address that runs into a path is still at its ho
   const f = scanCommits([c], cfg({ publicEmails: [], blockedDomains: ['example.internal'] }))
   assert.deepEqual(f.map((x) => [x.where, x.match]), [['message', 'git@git.example.internal']])
 })
+
+test('unread: a file not read in full is a finding of its own, last, under a masked name when its name is secret (DG-30)', () => {
+  const c = commit({
+    files: ['big.dat', 'nimbus-dump.bin'],
+    added: [{ file: 'big.dat', line: 1, text: 'see /home/user/x' }],
+    unread: [{ file: 'big.dat', why: 'limit' }, { file: 'nimbus-dump.bin', why: 'binary' }],
+  })
+  const f = scanCommits([c], cfg({ terms: [compileTerm('nimbus')] }))
+  assert.deepEqual(kinds(f), ['term/file name', 'path/big.dat:1', 'unread/big.dat', 'unread/ni… (15 chars)'])
+  assert.deepEqual(f.filter((x) => x.rule === 'unread').map((x) => x.kind), ['read in part — past the read limit', 'not read — git printed it as binary'])
+  assert.deepEqual(scanCommits([commit()], cfg()), [], 'a commit without unread files has no such finding')
+})

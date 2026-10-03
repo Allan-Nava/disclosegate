@@ -1,8 +1,8 @@
 // Reading what is about to leave: commit metadata, messages and added lines. Every call
 // pins the settings that would change git's output — a pager, a signature check, an
-// external diff, quoted paths, a dropped root diff, a diff relative to a subdirectory, a
-// submodule described in lines — so a user's global config cannot make a line invisible
-// to the rules.
+// external diff, a textconv, quoted paths, a dropped root diff, a diff relative to a
+// subdirectory, a submodule described in lines — so a user's global config cannot make a
+// line invisible to the rules.
 //
 // Nothing a commit carries can move the framing (DG-29). The patches come from one
 // `git log -p --cc -U0 --format=%H`: the only text git writes of its own between them is
@@ -11,20 +11,43 @@
 // looked for, and a line outside a hunk that git does not write is an error, never
 // skipped. The author, committer and message come from the commit object itself,
 // through `git cat-file --batch`, which states each object's length in bytes before it.
-// No separator byte is involved anywhere: a 0x01, a NUL past git's binary sniff or a
-// whole fake header in a line, a message or a name is read as what it is.
+// No separator byte is involved anywhere: a 0x01, a NUL or a whole fake header in a
+// line, a message or a name is read as what it is.
+//
+// Nothing is binary to the reading (DG-30). `--text` makes git print every file as lines
+// whatever its attributes (`-diff`, `binary`, a driver set to binary — from the
+// repository, `info/attributes` or the user's `core.attributesFile`), its size against
+// `core.bigFileThreshold`, or a NUL in its first bytes. The one place git ignores
+// `--text` is a merge's combined diff; there a file git calls binary is read through one
+// diff per parent (`mergeOwn`). The lines are split on the newline byte alone; a file's
+// added text is read up to `READ_LIMIT` bytes in a commit, and a commit's up to
+// `COMMIT_LIMIT`. What lies past either is consumed for the framing, not decoded, and
+// its file is reported `unread` — never dropped quietly.
 import { spawn, spawnSync } from 'node:child_process'
-import { StringDecoder } from 'node:string_decoder'
 
 export class GitError extends Error {}
 
 const PINNED = ['-c', 'core.quotePath=false', '-c', 'log.showSignature=false', '-c', 'log.showRoot=true', '-c', 'core.pager=cat', '-c', 'diff.noprefix=false', '-c', 'diff.relative=false']
-const DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '--submodule=short', '-U0', '--src-prefix=a/', '--dst-prefix=b/']
+const DIFF = ['--no-color', '--text', '--no-ext-diff', '--no-textconv', '--no-renames', '--submodule=short', '-U0', '--src-prefix=a/', '--dst-prefix=b/']
 // A merge's own changes: `git log -p` shows none, `--cc` the lines new to every parent.
 const MERGES = ['--cc']
 // The sha alone: nothing a commit carries is written into the framing.
 const FORMAT = '%H'
 const SHA_LINE = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/
+
+// Bytes of a file's added text read in one commit. Past it, the lines are counted, not
+// kept, and the file is an `unread` finding: memory and time stay bounded on a large
+// binary, and what was not read is said. Per file, so one large file never costs another
+// its reading. 100 MiB is where GitHub refuses a file outright; text that size was read
+// whole before `--text`, and still is.
+export const READ_LIMIT = 100 * 1024 * 1024
+// Bytes of added text read in one commit, all files together: the most a commit holds in
+// memory. About where the collected reading of 0.0.3 failed outright, on a string longer
+// than V8 allows — so no commit it could read is read less now.
+export const COMMIT_LIMIT = 512 * 1024 * 1024
+// The longest line outside a hunk taken for git's own: a header, a path. Longer is not
+// git's, and is an error.
+const HEADER_LIMIT = 1024 * 1024
 
 export function git(args, { cwd, input } = {}) {
   const r = spawnSync('git', [...PINNED, ...args], { cwd, input, encoding: 'utf8', maxBuffer: 1 << 30 })
@@ -66,85 +89,134 @@ function unquote(p) {
 }
 
 // What git writes outside a hunk, besides the `diff` and `+++` lines read for the file
-// name and the hunk headers: extended headers, the old side's name, a binary file's one
-// line, the no-newline marker. Anything else there means the reading has lost its place.
-const OUTSIDE = /^(?:old mode |new mode |deleted file mode |new file mode |mode |index |similarity index |dissimilarity index |rename from |rename to |copy from |copy to |Binary files |--- |\\)/
+// name, the hunk headers and a `Binary files` line: extended headers, the old side's
+// name, the no-newline marker. Anything else there means the reading has lost its place.
+const OUTSIDE = /^(?:old mode |new mode |deleted file mode |new file mode |mode |index |similarity index |dissimilarity index |rename from |rename to |copy from |copy to |--- |\\)/
+
+const PLUS = 0x2b
+const MINUS = 0x2d
+const SPACE = 0x20
+const BACKSLASH = 0x5c
+
+// `Binary files a/<p> and b/<p> differ`, either side possibly /dev/null: the file's name.
+// Without renames both sides name the same path, so they are the same length, and a name
+// holding " and " still splits in the middle.
+function binaryName(inner) {
+  let p
+  if (inner.startsWith('/dev/null and ')) p = inner.slice('/dev/null and '.length)
+  else if (inner.endsWith(' and /dev/null')) p = inner.slice(0, -' and /dev/null'.length)
+  else p = inner.slice((inner.length - ' and '.length) / 2 + ' and '.length)
+  return unquote(p).replace(/^[ab]\//, '')
+}
 
 // The added lines of a diff produced with -U0, with their new-side line numbers, read a
-// line at a time. A hunk is consumed by its own counts, so an added line whose text
-// starts with `++ `, or is a sha, or a `diff --git`, is content — never a header.
+// line at a time as bytes. A hunk is consumed by its own counts, so an added line whose
+// text starts with `++ `, or is a sha, or a `diff --git`, is content — never a header.
+// Only the newline byte ends a line: a NUL, a CR, 0x01 to 0x03 are content.
 //
 // A merge comes as a combined diff (`--cc`): `@@@ -a,b -c,d +e,f @@@`, one `@` and one
 // range per parent plus the result, and one marker column per parent in front of each
 // line. A line with `-` in any column is in a parent and gone from the result; every
 // other line is in the result, and is the merge's own only when every column is `+` —
 // new to every parent. A line one parent already had was read in that parent's commit,
-// or is already public.
+// or is already public. A file the combined diff calls binary — it does whatever
+// `--text` says — is listed in `binary` and read per parent once the parents are known.
+//
+// At most `limit` bytes of a file's added text are decoded, and `commitLimit` of a
+// commit's; the lines past either are consumed by their marker byte, and a file that lost
+// text is listed in `unread`.
+// `room()` tells the splitter how much of the next line to keep.
 //
 // `log` mode reads `git log --format=%H` output: a sha on a line of its own, outside any
 // hunk, opens the next commit. Without it, one diff, and a sha line is out of place. A
 // hunk that ends early, a line no hunk can hold, or text git does not write is a
 // GitError: the caller refuses the push rather than read less than was sent.
-function patchReader({ log }) {
+function patchReader({ log, limit = READ_LIMIT, commitLimit = COMMIT_LIMIT }) {
   const what = log ? 'git log' : 'git diff'
-  let cur = log ? null : { added: [], files: [] }
+  const fresh = (sha) => ({ ...(sha ? { sha } : {}), added: [], files: [], unread: [], binary: [], read: 0 })
+  let cur = log ? null : fresh()
   let file = null
+  let fileRead = 0
+  let combinedFile = null
   let hunk = null
   let no = 0
   let done = []
   const fail = (why) => {
     throw new GitError(`${what} output could not be read (${why}, line ${no}) — refusing rather than reading less`)
   }
-  const plain = (x) => {
+  const unread = (f, why) => {
+    if (f != null && !cur.unread.some((u) => u.file === f)) cur.unread.push({ file: f, why })
+  }
+  // What the file's budget and the commit's still hold.
+  const budget = () => Math.max(0, Math.min(limit - fileRead, commitLimit - cur.read))
+  // An added line: its text from byte `skip`, as much as the budget holds.
+  const record = (b, total, skip) => {
+    if (!file) return
+    const left = budget()
+    if (left <= 0) {
+      if (total > skip) unread(file, 'limit')
+      return
+    }
+    const have = Math.min(b.length - skip, left)
+    cur.added.push({ file, line: hunk.n, text: b.toString('utf8', skip, skip + have) })
+    fileRead += have
+    cur.read += have
+    if (total - skip > have) unread(file, 'limit')
+  }
+  const plain = (b, total) => {
     const h = hunk
-    if (x.startsWith('\\')) return
-    if (x[0] === '+' && h.add > 0) {
-      if (file) cur.added.push({ file, line: h.n, text: x.slice(1) })
+    const c = b[0]
+    if (c === BACKSLASH) return
+    if (c === PLUS && h.add > 0) {
+      record(b, total, 1)
       h.n++
       h.add--
-    } else if (x[0] === '-' && h.del > 0) h.del--
-    else if (x[0] === ' ' && h.add > 0 && h.del > 0) {
+    } else if (c === MINUS && h.del > 0) h.del--
+    else if (c === SPACE && h.add > 0 && h.del > 0) {
       h.n++
       h.add--
       h.del--
     } else fail('a line its hunk cannot hold')
     if (h.add === 0 && h.del === 0) hunk = null
   }
-  const combined = (x) => {
+  const combined = (b, total) => {
     const h = hunk
-    if (x.startsWith('\\')) return
-    const cols = x.slice(0, h.parents)
+    if (b[0] === BACKSLASH) return
+    const cols = b.toString('latin1', 0, h.parents)
     if (cols.length !== h.parents || /[^ +-]/.test(cols)) fail('a combined line without a column per parent')
     if (cols.includes('-')) {
       for (let p = 0; p < h.parents; p++) if (cols[p] === '-' && h.old[p]-- <= 0) fail('a combined hunk longer than its counts')
     } else {
       if (h.add <= 0) fail('a combined hunk longer than its counts')
       for (let p = 0; p < h.parents; p++) if (cols[p] === ' ' && h.old[p]-- <= 0) fail('a combined hunk longer than its counts')
-      if (file && !cols.includes(' ')) cur.added.push({ file, line: h.n, text: x.slice(h.parents) })
+      if (!cols.includes(' ')) record(b, total, h.parents)
       h.n++
       h.add--
     }
     if (h.add === 0 && h.old.every((c) => c === 0)) hunk = null
   }
-  const line = (l) => {
-    no++
-    if (hunk) return hunk.parents ? combined(l) : plain(l)
+  const header = (l) => {
     if (SHA_LINE.test(l)) {
       if (!log) fail('a commit in a single diff')
       if (cur) done.push(cur)
-      cur = { sha: l, added: [], files: [] }
+      cur = fresh(l)
       file = null
+      combinedFile = null
       return
     }
     if (l === '') return
     if (!cur) fail('text before the first commit')
-    if (/^diff (?:--git|--cc|--combined) /.test(l)) {
+    const d = l.match(/^diff (--git|--cc|--combined) (.*)$/)
+    if (d) {
       file = null
+      fileRead = 0
+      combinedFile = d[1] === '--git' ? null : unquote(d[2])
       return
     }
     if (l.startsWith('+++ ')) {
       const p = l.slice(4)
       file = p === '/dev/null' ? null : unquote(p).replace(/^b\//, '')
+      fileRead = 0
       if (file) cur.files.push(file)
       return
     }
@@ -164,11 +236,39 @@ function patchReader({ log }) {
       if (add || old.some((c) => c > 0)) hunk = { parents, old, add, n: Number(cc[3]) }
       return
     }
+    // A combined diff ignores --text: its binary file is read per parent. A two-sided
+    // diff never prints this under --text; if it does, the file is reported, not skipped.
+    if (l === 'Binary files differ' && combinedFile != null) {
+      if (!log) unread(combinedFile, 'binary')
+      else if (!cur.binary.includes(combinedFile)) cur.binary.push(combinedFile)
+      return
+    }
+    const bin = l.match(/^Binary files (.+) differ$/)
+    if (bin) {
+      const name = binaryName(bin[1])
+      if (!cur.files.includes(name)) cur.files.push(name)
+      unread(name, 'binary')
+      return
+    }
     if (OUTSIDE.test(l)) return
     fail('a line outside any hunk that git does not write')
   }
   return {
-    line,
+    // How many bytes of the next line to keep: inside a hunk, its marker columns and what
+    // the budget still holds — nothing more for a file that is not read (a deletion);
+    // outside, a header's worth.
+    room() {
+      if (!hunk) return HEADER_LIMIT
+      const markers = hunk.parents || 1
+      return file ? markers + budget() : markers
+    },
+    // One line, without its newline: `b` the bytes kept of it, `total` its length.
+    bytes(b, total) {
+      no++
+      if (hunk) return hunk.parents ? combined(b, total) : plain(b, total)
+      if (total > b.length) fail('a line outside any hunk longer than git writes')
+      return header(b.toString('utf8'))
+    },
     // The commits completed so far — each one as soon as the next one's sha arrives.
     take() {
       const out = done
@@ -185,25 +285,65 @@ function patchReader({ log }) {
   }
 }
 
-// The lines of git's output: the empty string after its final newline is not one.
-const linesOf = (text) => {
-  const lines = String(text).split('\n')
-  if (lines.at(-1) === '') lines.pop()
-  return lines
+// Bytes in, lines out: a line is cut at the newline byte, and of each only what the
+// reader has room for is kept — a line of any length costs its kept bytes, never more.
+// A line split across two chunks waits in `parts`.
+function lineSplitter(r) {
+  let parts = []
+  let kept = 0
+  let total = 0
+  let room = -1
+  const flush = () => {
+    r.bytes(parts.length === 1 ? parts[0] : Buffer.concat(parts, kept), total)
+    parts = []
+    kept = 0
+    total = 0
+    room = -1
+  }
+  return {
+    push(buf) {
+      let i = 0
+      while (i < buf.length) {
+        if (room < 0) room = r.room()
+        const nl = buf.indexOf(10, i)
+        const end = nl === -1 ? buf.length : nl
+        const take = Math.min(end - i, room - kept)
+        if (take > 0) {
+          parts.push(buf.subarray(i, i + take))
+          kept += take
+        }
+        total += end - i
+        if (nl === -1) return
+        flush()
+        i = nl + 1
+      }
+    },
+    end() {
+      if (total > 0) flush()
+    },
+    get pending() {
+      return Buffer.concat(parts, kept).toString('utf8')
+    },
+  }
 }
 
-export function parsePatch(text) {
-  const r = patchReader({ log: false })
-  for (const l of linesOf(text)) r.line(l)
-  const [{ added, files }] = r.end()
-  return { added, files }
+const bytesOf = (text) => (Buffer.isBuffer(text) ? text : Buffer.from(String(text), 'utf8'))
+
+// One diff — `git diff`, `diff-tree` — as `{ added, files, unread }`.
+export function parsePatch(text, { limit, commitLimit } = {}) {
+  const r = patchReader({ log: false, limit, commitLimit })
+  const s = lineSplitter(r)
+  s.push(bytesOf(text))
+  s.end()
+  const [{ added, files, unread }] = r.end()
+  return { added, files, unread }
 }
 
-// The patches of `git log --format=%H -p`: `{ sha, added, files }` per commit, in order.
-export function parseLog(out) {
-  const r = patchReader({ log: true })
-  for (const l of linesOf(out)) r.line(l)
-  return r.end()
+// The patches of `git log --format=%H -p`, in order: `{ sha, added, files, unread,
+// binary, read }` per commit — what `splitLog` yields, from the whole output at once.
+export function parseLog(out, opts) {
+  const s = splitLog(opts)
+  return [...s.push(bytesOf(out)), ...s.end()]
 }
 
 // The arguments of the `git log` pass, without the pinned settings `git()` adds. revs
@@ -250,52 +390,84 @@ function person(v) {
   return { name: s.slice(0, lt).replace(/[ \t\r\n]+$/, ''), email: s.slice(lt + 1, gt) }
 }
 
-// A patch and its commit object, as one commit. A sha `git log` named that is not a
-// commit to `git cat-file` means the two readings disagree: refused, not skipped.
-function commitOf(p, o) {
-  if (!o || o.type !== 'commit' || o.sha !== p.sha) throw new GitError(`git cat-file did not return the commit git log named (${p.sha.slice(0, 7)}) — refusing rather than reading less`)
-  const { author, committer, message } = parseCommit(o.body)
-  return { sha: p.sha, author, committer, message, added: p.added, files: p.files }
+// The parents a commit object names, in order.
+const parentsOf = (body) => {
+  const head = body.subarray(0, body.indexOf('\n\n') === -1 ? body.length : body.indexOf('\n\n')).toString('latin1')
+  return [...head.matchAll(/^parent ([0-9a-f]+)$/gm)].map((m) => m[1])
 }
 
+// A merge's own lines in a file its combined diff printed as binary — `--cc` ignores
+// `--text`, and a `-diff` lock file is what a conflict is most often resolved in. One
+// `--text` diff per parent; a line is the merge's own when every parent's diff adds it,
+// which is what the combined diff's `+` in every column means. Within what the commit's
+// budget has left.
+function mergeOwn(cwd, sha, parents, path, left) {
+  const per = parents.map((parent) => {
+    const r = gitBytes(['--literal-pathspecs', 'diff-tree', '-p', ...DIFF, parent, sha, '--', path], { cwd })
+    if (!r.ok) throw new GitError(`git diff-tree failed: ${r.err.trim().split('\n')[0]}`)
+    return parsePatch(r.out, { commitLimit: left })
+  })
+  const rest = per.slice(1).map((p) => new Set(p.added.map((a) => a.line)))
+  const added = per[0].added.filter((a) => rest.every((s) => s.has(a.line)))
+  const lost = per.flatMap((p) => p.unread).find((u) => u.file === path)
+  return { added, unread: lost ? [{ file: path, why: lost.why }] : [] }
+}
+
+// A patch and its commit object, as one commit. A sha `git log` named that is not a
+// commit to `git cat-file` means the two readings disagree: refused, not skipped.
+function commitOf(cwd, p, o) {
+  if (!o || o.type !== 'commit' || o.sha !== p.sha) throw new GitError(`git cat-file did not return the commit git log named (${p.sha.slice(0, 7)}) — refusing rather than reading less`)
+  const { author, committer, message } = parseCommit(o.body)
+  const c = { sha: p.sha, author, committer, message, added: p.added, files: p.files, unread: p.unread }
+  let read = p.read
+  for (const path of p.binary) {
+    const own = mergeOwn(cwd, p.sha, parentsOf(o.body), path, COMMIT_LIMIT - read)
+    for (const a of own.added) read += Buffer.byteLength(a.text)
+    c.added = [...c.added, ...own.added]
+    if (!c.files.includes(path)) c.files = [...c.files, path]
+    for (const u of own.unread) if (!c.unread.some((x) => x.file === u.file)) c.unread = [...c.unread, u]
+  }
+  return c
+}
+
+// git's output as bytes: a line of a binary file is not UTF-8, and a log of large files
+// is longer than a string can be.
+function gitBytes(args, { cwd } = {}) {
+  const r = spawnSync('git', [...PINNED, ...args], { cwd, maxBuffer: 1 << 30 })
+  if (r.error) throw new GitError(`git could not be run: ${r.error.code ?? r.error.message}`)
+  return { ok: r.status === 0, out: r.stdout, err: String(r.stderr ?? '') }
+}
+
+// The collected reading: the whole log, then the objects. The commands stream instead
+// (`streamCommits`); this is the reading they are held to.
 export function logCommits(cwd, revs) {
-  const r = git(logArgs(revs), { cwd })
+  const r = gitBytes(logArgs(revs), { cwd })
   if (!r.ok) throw new GitError(`git log failed: ${r.err.trim().split('\n')[0]}`)
   const patches = parseLog(r.out)
   if (!patches.length) return []
   const objects = catObjects(cwd, patches.map((p) => p.sha))
   if (objects.length !== patches.length) throw new GitError('git cat-file returned fewer objects than git log named commits — refusing rather than reading less')
-  return patches.map((p, i) => commitOf(p, objects[i]))
+  return patches.map((p, i) => commitOf(cwd, p, objects[i]))
 }
 
 // The log as it arrives: bytes in, whole patches out. A commit is complete when the next
 // one's sha line arrives, so only the commit being read is held, never the history; a
-// line split across two chunks waits in `pending`, and the decoder carries a character
-// split across two, so the reading is the one `parseLog` makes of the whole string.
-export function splitLog() {
-  const decoder = new StringDecoder('utf8')
-  const r = patchReader({ log: true })
-  let pending = ''
-  const take = (text) => {
-    if (!text.includes('\n')) {
-      pending += text
-      return []
-    }
-    const lines = (pending + text).split('\n')
-    pending = lines.pop()
-    for (const l of lines) r.line(l)
-    return r.take()
-  }
+// line split across two chunks waits in the splitter, and a line is decoded only once
+// whole, so the reading is the one `parseLog` makes of the whole output.
+export function splitLog({ limit, commitLimit } = {}) {
+  const r = patchReader({ log: true, limit, commitLimit })
+  const s = lineSplitter(r)
   return {
-    push: (chunk) => take(decoder.write(chunk)),
+    push(chunk) {
+      s.push(chunk)
+      return r.take()
+    },
     end() {
-      const out = take(decoder.end())
-      if (pending !== '') r.line(pending)
-      pending = ''
-      return [...out, ...r.end()]
+      s.end()
+      return r.end()
     },
     get pending() {
-      return pending
+      return s.pending
     },
   }
 }
@@ -370,7 +542,7 @@ export async function* streamCommits(cwd, revs) {
   })
   const split = splitLog()
   let objects = null
-  const commit = async (p) => commitOf(p, await (objects ??= catFile(cwd)).get(p.sha))
+  const commit = async (p) => commitOf(cwd, p, await (objects ??= catFile(cwd)).get(p.sha))
   try {
     for await (const chunk of child.stdout) for (const p of split.push(chunk)) yield await commit(p)
     const { error, status } = await exited
@@ -410,10 +582,16 @@ export function pushRevSets(stdin, remoteName, cwd) {
   return { sets, tips, deletions }
 }
 
-export function commitsForSets(cwd, sets) {
-  const seen = new Map()
-  for (const revs of sets) for (const c of logCommits(cwd, revs)) if (!seen.has(c.sha)) seen.set(c.sha, c)
-  return [...seen.values()]
+// The commits of several rev sets — a push of several refs — each once, streamed.
+export async function* streamSets(cwd, sets) {
+  const seen = new Set()
+  for (const revs of sets) {
+    for await (const c of streamCommits(cwd, revs)) {
+      if (seen.has(c.sha)) continue
+      seen.add(c.sha)
+      yield c
+    }
+  }
 }
 
 // Objects by sha through one `git cat-file --batch`, read as bytes: the size git
@@ -498,10 +676,10 @@ const ident = (cwd, v) => {
 
 // What the next commit would carry: the staged lines and the identity git would use.
 export function stagedCommit(cwd) {
-  const r = git(['diff', '--cached', '-p', ...DIFF, '--'], { cwd })
+  const r = gitBytes(['diff', '--cached', '-p', ...DIFF, '--'], { cwd })
   if (!r.ok) throw new GitError(`git diff --cached failed: ${r.err.trim().split('\n')[0]}`)
-  const { added, files } = parsePatch(r.out)
-  return { sha: 'staged', author: ident(cwd, 'GIT_AUTHOR_IDENT'), committer: ident(cwd, 'GIT_COMMITTER_IDENT'), message: '', added, files }
+  const { added, files, unread } = parsePatch(r.out)
+  return { sha: 'staged', author: ident(cwd, 'GIT_AUTHOR_IDENT'), committer: ident(cwd, 'GIT_COMMITTER_IDENT'), message: '', added, files, unread }
 }
 
 // `scan` with no range: what a plain `git push` would most likely send.

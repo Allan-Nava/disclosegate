@@ -25,8 +25,26 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   its exit code counts — either can refuse the push; one disclosegate refuses never
   reaches it. `doctor` reports the chain, and `uninstall` still restores the hook. A hook
   written by 0.0.3 or earlier chains once `disclosegate install` updates it (DG-21).
+- The hook, `--pre-commit` and `scan` stream the log as `scan --history` does, keeping
+  findings rather than commits, so a push carrying large files no longer has to fit in
+  one string; `doctor` says what is read and up to where (DG-30).
 
 ### Fixed
+- **Security:** a file git prints as `Binary files … differ` is read. A `-diff` or
+  `binary` attribute — in `.gitattributes`, `.git/info/attributes` or the user's
+  `core.attributesFile` — a diff driver set to `binary`, a `core.bigFileThreshold` and a
+  NUL in a file's first 8,000 bytes each made git print that one line instead of the
+  file's lines, so a private term or a work address in a lock file marked that way, or in
+  an image or a compiled binary, passed the hook, `scan`, `--history` and `--pre-commit`
+  in 0.0.3. Every diff now runs with `--text`, with `--no-textconv` and `--no-ext-diff`
+  kept, so the bytes are read and never a driver's rendering of them; a merge's own lines
+  in such a file, where git's combined diff ignores `--text`, are read through one diff
+  per parent. Lines are split on the newline byte alone — a NUL, 0x01 to 0x03 and a CR
+  are content. A file's added lines are read up to 100 MiB in a commit, and a commit's up
+  to 512 MiB; a file past either is a new `unread` finding — refusing in block mode,
+  printed in audit mode and in `--json` — never a silent skip. On a synthetic history
+  with 336 MiB of random blobs under `-diff`, `scan --history` takes 5.5 s against 0.16 s
+  that read none of them (DG-30).
 - **Security:** a 0x01 byte in an added line no longer hides the rest of its commit. The
   log was cut into commits at every 0x01 and its header at the first 0x03, and git prints
   a file holding those bytes as text and takes them in a message or an author name: the
