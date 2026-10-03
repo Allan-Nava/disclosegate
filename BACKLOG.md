@@ -179,10 +179,27 @@ and rates are published, the matches are not.
   a tag at `TO_REF`, enforcement, audit mode, the fail-closed cases and a real push through
   a caller modelled on pre-commit's. pre-commit itself was not installed, so it never ran.
   <!-- dg: prio=low size=S labels=hook,enhancement ver=main -->
-- [ ] **DG-29 — A control byte in a line splits the log**: `parseLog` and `splitLog` cut
+- [x] **DG-29 — A control byte in a line splits the log**: `parseLog` and `splitLog` cut
   the log at every `\x01`, and git prints a file holding that byte (but no NUL) as text,
   so an added line containing it splits one commit in two — the lines after it in that
   commit go unread and the commit is counted twice. Found during DG-22: a home path after
   such a line passed `scan --history` in 0.0.3 and on `main`, and the hook reads through
   the same parser. Separate commits by a byte a text diff cannot carry (NUL, with `-z`)
-  and add the case as a real push. <!-- dg: prio=med size=S labels=rules,hook -->
+  and add the case as a real push. Done 2026-10-03: not NUL — git prints a file whose NUL
+  lies past its first 8,000 bytes as text, and a message or an author name takes 0x01 to
+  0x03 too. No byte frames the reading now: `git log --format=%H` gives the patches, a sha
+  line recognised only outside a hunk and every hunk consumed by its counts; the author,
+  committer and message come from the commit object through `git cat-file --batch`, by
+  its stated length; anything outside that shape is a `GitError`, exit 2, a refused push.
+  `diff.relative` and `diff.submodule` are pinned. Tests on a history built to forge the
+  framing, on every path (hook, real push, `--range`, `--history`, `--pre-commit`);
+  readings identical to 0.0.3 on six real histories and three synthetic ones; `scan
+  --history` on a synthetic 4,000 commits as fast as before, where one `git show` per
+  commit would take 44 s. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
+- [ ] **DG-30 — A `-diff` attribute hides a file's lines**: a `.gitattributes` in the
+  working tree that marks a path `-diff` or `binary` (lock files often are) makes
+  `git log -p` print `Binary files … differ` for it, so its added lines are never read —
+  an internal registry host in a lock file passes. `--text` would read real binaries as
+  lines too; decide between that with a cap, ignoring the `diff` attribute for text git
+  would otherwise print, or saying so in the README. Found during DG-29.
+  <!-- dg: prio=med size=S labels=rules,hook -->
