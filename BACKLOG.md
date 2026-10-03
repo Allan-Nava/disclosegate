@@ -153,9 +153,13 @@ and rates are published, the matches are not.
   message and in an added line is held to `blockedDomains` — not to `publicEmails` — and
   found as an `email` / `blocked domain` finding, masked, `allowPaths` no exemption; a
   trailer's address is read once. <!-- dg: prio=med size=S labels=rules ver=0.0.3 -->
-- [ ] **DG-21 — Chain a moved-aside hook**: `install --force` moves a foreign pre-push
+- [x] **DG-21 — Chain a moved-aside hook**: `install --force` moves a foreign pre-push
   hook aside and it stops running; run it after disclosegate with the same stdin
-  instead. <!-- dg: prio=low size=S labels=hook,enhancement -->
+  instead. Done 2026-10-03: the hook script holds stdin in a variable, runs disclosegate on
+  it, and on a pass runs `pre-push.before-disclosegate` with the same stdin and arguments,
+  its exit code the hook's; real pushes show it running after a clean push (from a
+  subdirectory, and under `core.hooksPath`), refusing one, and never reached by a refused
+  one; `doctor` reports the chain. <!-- dg: prio=low size=S labels=hook,enhancement ver=main -->
 - [ ] **DG-22 — Stream `--history`**: the log is read into memory whole; on a large
   repository read it as a stream. <!-- dg: prio=low size=S labels=enhancement -->
 - [ ] **DG-23 — The social card**: render `assets/social-preview.png` from

@@ -29,7 +29,8 @@ bin/lib/               rules (pure: the four rules, masking, ordering — no fs,
                        parser, a merge's combined hunks included),
                        config (user file → repository file, the trust order, remotes,
                        the init template), report (text and JSON, masked),
-                       hook (hooks dir, the hook script, the marker, install/uninstall),
+                       hook (hooks dir, the hook script, the marker, install/uninstall,
+                       the moved-aside hook chained after disclosegate),
                        doctor, check (this repository's invariants), changelog
 test/                  node:test suites — rules.test.mjs (units; the only file that spells
                        the path shapes out), config, cli (scan/install/init/doctor/exit
@@ -69,7 +70,10 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    else — the user's terms and the email, name and path rules still read them.
 5. **Never sends.** No network call, no telemetry. `git`, two files, stdout and stderr.
 6. **Only its own hook.** Marked by `MARKER` in `bin/lib/hook.mjs`; a foreign hook is left
-   alone without `--force`, moved aside with it, restored by `uninstall`.
+   alone without `--force`, moved aside with it, restored by `uninstall`. Moved aside, it
+   is chained, not dropped: the hook script runs it after disclosegate passes the push,
+   with the same arguments and stdin (held in a shell variable), and its exit code is the
+   hook's; a push disclosegate refuses never reaches it.
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
    `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
    diffs — and parses hunks by their counts, so an added line that begins with `++ ` is

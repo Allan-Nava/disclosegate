@@ -57,8 +57,17 @@ Node 18 or later. No runtime dependency.
 `disclosegate install` writes `.git/hooks/pre-push` — or into `core.hooksPath` when that
 is set, so a global `core.hooksPath` covers every repository at once. The file carries a
 marker comment; `install` never overwrites a hook without it unless given `--force`, which
-moves the other hook to `pre-push.before-disclosegate` (it then no longer runs), and
-`uninstall` removes only its own hook and puts the moved one back.
+moves the other hook to `pre-push.before-disclosegate`, and `uninstall` removes only its
+own hook and puts the moved one back.
+
+A hook moved aside keeps running: disclosegate goes first, and when it passes the push the
+other hook runs with the same arguments and the same stdin, byte for byte, and its exit
+code is the hook's — so either of the two can refuse the push. A push disclosegate refuses
+never reaches the other hook. It runs from its new name, so a hook that dispatches on its
+own file name (`$0`) sees `pre-push.before-disclosegate`; one that is not executable is
+skipped with a warning, as git skips it. `disclosegate doctor` says when a hook is chained.
+A hook installed by 0.0.3 or earlier does not chain: run `disclosegate install` again to
+update it.
 
 git runs the hook with the remote's name and URL, and one line per ref on stdin:
 

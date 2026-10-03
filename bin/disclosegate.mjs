@@ -111,7 +111,7 @@ function doInstall(args, cwd) {
     err(`disclosegate: ${tildify(r.file)}: ${r.message}`)
     return 2
   }
-  if (r.moved) out(`disclosegate: moved the existing hook to ${tildify(r.moved)} — it no longer runs`)
+  if (r.moved) out(`disclosegate: moved the existing hook to ${tildify(r.moved)} — it runs after disclosegate, when a push passes`)
   out(`disclosegate: ${r.updated ? 'updated' : 'installed'} ${tildify(r.file)}`)
   return 0
 }

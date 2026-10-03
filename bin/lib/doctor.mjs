@@ -1,9 +1,10 @@
 // `disclosegate doctor`: is the guard actually guarding? Config found, which rules are
 // active, the hook in place, which remotes it enforces. It prints counts, key names
 // and remote names — never a list's values, which are the private part.
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { git } from './git.mjs'
-import { hookState, hooksDir } from './hook.mjs'
+import { BACKUP_SUFFIX, hookState, hooksDir } from './hook.mjs'
 import { loadConfig, placeholders, remoteVerdict, tildify } from './config.mjs'
 
 const n = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`
@@ -50,7 +51,7 @@ export function doctor({ cwd, root, env = process.env }) {
   const file = join(dir, 'pre-push')
   const state = hookState(file)
   const where = `${tildify(file, env)}${viaHooksPath ? ' (core.hooksPath)' : ''}`
-  if (state === 'ours') row('hook', `${where} — installed`)
+  if (state === 'ours') row('hook', `${where} — installed${existsSync(file + BACKUP_SUFFIX) ? ` — then pre-push${BACKUP_SUFFIX}, chained` : ''}`)
   else if (state === 'foreign') {
     row('hook', `${where} — another tool's hook`)
     problems.push('the pre-push hook is not disclosegate\'s: pushes are not checked. `disclosegate install --force` moves it aside')
