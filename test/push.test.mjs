@@ -231,6 +231,41 @@ test('a user file that is a symlink to a file outside the repository is read as 
   assert.ok(sb.remoteHas('refs/heads/main'))
 })
 
+// A merge shows no diff under `git log -p`; what it adds itself — a conflict resolved
+// with text neither side had — is only in its combined diff.
+test("a merge's own lines — a conflict resolved with new text — are read", () => {
+  const sb = guarded({ publicEmails: [ALICE.email], terms: ['nimbus'] })
+  const base = sb.commit({ file: 'x.txt', content: 'one\nkeep\n' })
+  assert.equal(sb.push().code, 0)
+  sb.git(['checkout', '-q', '-b', 'side'])
+  sb.commit({ file: 'x.txt', content: 'three\nkeep\n' })
+  sb.git(['checkout', '-q', 'main'])
+  sb.commit({ file: 'x.txt', content: 'two\nkeep\n' })
+  assert.notEqual(sb.git(['merge', '-q', 'side'], { allowFail: true }).code, 0, 'the merge conflicts')
+  writeFileSync(join(sb.work, 'x.txt'), `nimbus at ${HOME_PATH}\nkeep\n`)
+  sb.git(['add', 'x.txt'])
+  sb.git(['commit', '-q', '--no-edit'])
+  const r = sb.push()
+  assert.notEqual(r.code, 0, r.out)
+  assert.equal(sb.git(['rev-parse', 'main'], { cwd: sb.remote }).stdout.trim(), base, 'the remote still has only the base')
+  assert.match(r.out, /term\s+[0-9a-f]{7}\s+x\.txt:1\s/)
+  assert.match(r.out, /path\s+[0-9a-f]{7}\s+x\.txt:1\s/)
+  assert.match(r.out, /2 findings in 1 of 3 commits/)
+})
+
+test("a merge with no lines of its own adds no finding: a parent's line is read once", () => {
+  const sb = guarded()
+  sb.commit()
+  sb.git(['checkout', '-q', '-b', 'side'])
+  sb.commit({ file: 'side.txt', content: `${HOME_PATH}\n` })
+  sb.git(['checkout', '-q', 'main'])
+  sb.commit()
+  sb.git(['merge', '-q', '--no-ff', '--no-edit', 'side'])
+  const r = sb.push()
+  assert.notEqual(r.code, 0)
+  assert.match(r.out, /1 finding in 1 of 4 commits/)
+})
+
 // An annotated tag is an object of its own: its tagger and its message are published
 // with it, even when every commit it points at is already on the remote.
 const tag = (sb, args, who = ALICE) => sb.git(['tag', ...args], { extraEnv: { GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email } })

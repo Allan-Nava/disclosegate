@@ -22,8 +22,9 @@ run on it.
 bin/disclosegate.mjs   the CLI: pre-push · scan · install · uninstall · init · doctor · check;
                        its header comment is the usage text and the site's command list
 bin/lib/               rules (pure: the four rules, masking, ordering — no fs, no git), git
-                       (one `git log -p -U0` pass, settings pinned; annotated tags through
-                       one `cat-file --batch`; the pre-push protocol; the patch parser),
+                       (one `git log -p --cc -U0` pass, settings pinned; annotated tags
+                       through one `cat-file --batch`; the pre-push protocol; the patch
+                       parser, a merge's combined hunks included),
                        config (user file → repository file, the trust order, remotes,
                        the init template), report (text and JSON, masked),
                        hook (hooks dir, the hook script, the marker, install/uninstall),
@@ -70,7 +71,8 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
    `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
    diffs — and parses hunks by their counts, so an added line that begins with `++ ` is
-   content.
+   content. A merge is read through `--cc`, its combined hunks by the same counts, and
+   only a line new to every parent is its own.
 
 ## Verifying a change
 

@@ -10,6 +10,10 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   its message like a commit message (`term`, `path`, trailers), in the hook and in `scan
   --history` — and so is a tag it points at. A tag is counted apart from the commits, and
   `--json` carries a `tags` count (DG-18).
+- A merge's own lines are read: `git log` runs with `--cc`, and the parser reads its
+  combined hunks by their counts, so a line new to every parent — what resolving a
+  conflict writes — goes through the term and path rules; a line one side already had is
+  not read twice (DG-19).
 
 ### Changed
 - The backlog check, the roadmap, the issue sync and the release-drift check are

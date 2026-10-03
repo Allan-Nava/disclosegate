@@ -131,6 +131,10 @@ still runs, and `doctor` says what is missing.
 | `path` | commit and tag messages, added lines | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` or a `file:///` URL naming a path. Built in, always on; a URL such as `https://example.com/home/about/` is not a home |
 | `name` | author, committer, tagger and trailer names | the name is in `blockedNames` |
 
+An added line is one a commit adds to its parent. A merge's are the lines new to every
+parent — what resolving a conflict writes — read from its combined diff (`git log --cc`);
+a line one side already had was read in that side's own commit, or is already public.
+
 Findings are listed worst first: a blocked domain, an address outside the allowlist, a
 term, a name, a path. A file whose *name* carries a term is never printed by name; its
 lines are shown under a masked one.

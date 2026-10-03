@@ -140,9 +140,12 @@ and rates are published, the matches are not.
   `git cat-file --batch`; the tagger goes through the email and name rules, the message
   through terms, paths and trailers; `scan --history` reads every annotated tag a ref
   points at. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
-- [ ] **DG-19 — A merge's own changes**: `git log -p` shows no diff for a merge, so a
+- [x] **DG-19 — A merge's own changes**: `git log -p` shows no diff for a merge, so a
   line added while resolving a conflict is not read. `--cc` shows only those lines;
-  parse its combined format. <!-- dg: prio=med size=M labels=rules,hook -->
+  parse its combined format. Done 2026-10-03: `git log` runs with `--cc`; `parsePatch`
+  consumes a combined hunk by its per-parent and result counts and takes a line as added
+  only when every parent column is `+`; a conflict resolved with new text is refused in a
+  real push, an octopus hunk parses. <!-- dg: prio=med size=M labels=rules,hook ver=main -->
 - [ ] **DG-20 — blockedDomains in text**: an address at a blocked domain in an added
   line or a message body (outside a trailer) is a term today only if listed as one;
   make the domain list apply there too. <!-- dg: prio=med size=S labels=rules -->

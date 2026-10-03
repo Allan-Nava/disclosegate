@@ -181,3 +181,47 @@ test('a tag: the tagger is read like a committer, its message like a commit mess
   assert.deepEqual(kinds(f), ['email/tagger', 'email/trailer Co-authored-by', 'term/tag message', 'name/tagger'])
   assert.ok(f.every((x) => x.tag), 'a finding on a tag says so')
 })
+
+test("parsePatch: a merge's combined hunks — only a line new to every parent is added", () => {
+  const patch = [
+    'diff --cc x.txt',
+    'index 1,2..3',
+    '--- a/x.txt',
+    '+++ b/x.txt',
+    '@@@ -1,2 -1,2 +1,4 @@@',
+    '- two',
+    ' -three',
+    '++nimbus',
+    '++++ not a header',
+    ' +ours',
+    '+ theirs',
+    'diff --cc y.txt',
+    'index 0000000,0000000..3',
+    'new file mode 100644',
+    '--- /dev/null',
+    '+++ b/y.txt',
+    '@@@ -1,0 -1,0 +1,1 @@@',
+    '++new',
+    'diff --cc z.txt',
+    'index 1,2,3..4',
+    '--- a/z.txt',
+    '+++ b/z.txt',
+    '@@@@ -5,0 -5,0 -5,1 +5,2 @@@@',
+    '+++octopus',
+    '++ in the third parent',
+    'diff --git a/w.txt b/w.txt',
+    '--- a/w.txt',
+    '+++ b/w.txt',
+    '@@ -0,0 +1 @@',
+    '+plain',
+  ].join('\n')
+  const { added, files } = parsePatch(patch)
+  assert.deepEqual(added, [
+    { file: 'x.txt', line: 1, text: 'nimbus' },
+    { file: 'x.txt', line: 2, text: '++ not a header' },
+    { file: 'y.txt', line: 1, text: 'new' },
+    { file: 'z.txt', line: 5, text: 'octopus' },
+    { file: 'w.txt', line: 1, text: 'plain' },
+  ])
+  assert.deepEqual(files, ['x.txt', 'y.txt', 'z.txt', 'w.txt'])
+})

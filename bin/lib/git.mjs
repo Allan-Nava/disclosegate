@@ -8,6 +8,8 @@ export class GitError extends Error {}
 
 const PINNED = ['-c', 'core.quotePath=false', '-c', 'log.showSignature=false', '-c', 'log.showRoot=true', '-c', 'core.pager=cat', '-c', 'diff.noprefix=false']
 const DIFF = ['--no-color', '--no-ext-diff', '--no-textconv', '--no-renames', '-U0', '--src-prefix=a/', '--dst-prefix=b/']
+// A merge's own changes: `git log -p` shows none, `--cc` the lines new to every parent.
+const MERGES = ['--cc']
 // %x01 opens a commit, %x02 separates fields, %x03 ends the header; none of the three
 // can be typed into a commit message by any ordinary means.
 const FORMAT = '%x01%H%x02%an%x02%ae%x02%cn%x02%ce%x02%B%x03'
@@ -51,9 +53,16 @@ function unquote(p) {
   return Buffer.from(bytes).toString('utf8')
 }
 
-// The added lines of a unified diff produced with -U0, with their new-side line
-// numbers. A hunk is consumed by its own counts, so an added line whose text starts
-// with `++ ` is content, never mistaken for a `+++` header.
+// The added lines of a diff produced with -U0, with their new-side line numbers. A
+// hunk is consumed by its own counts, so an added line whose text starts with `++ ` is
+// content, never mistaken for a `+++` header.
+//
+// A merge comes as a combined diff (`--cc`): `@@@ -a,b -c,d +e,f @@@`, one `@` and one
+// range per parent plus the result, and one marker column per parent in front of each
+// line. A line with `-` in any column is in a parent and gone from the result; every
+// other line is in the result, and is the merge's own only when every column is `+` —
+// new to every parent. A line one parent already had was read in that parent's commit,
+// or is already public.
 export function parsePatch(text) {
   const added = []
   const files = []
@@ -62,7 +71,7 @@ export function parsePatch(text) {
   let i = 0
   while (i < lines.length) {
     const l = lines[i]
-    if (l.startsWith('diff --git ')) {
+    if (/^diff (?:--git|--cc|--combined) /.test(l)) {
       file = null
       i++
       continue
@@ -96,6 +105,39 @@ export function parsePatch(text) {
       }
       continue
     }
+    const cc = l.match(/^(@{3,}) ((?:-\d+(?:,\d+)? )+)\+(\d+)(?:,(\d+))? \1(?: |$)/)
+    if (cc) {
+      const parents = cc[1].length - 1
+      const old = cc[2].trim().split(' ').map((r) => (r.includes(',') ? Number(r.split(',')[1]) : 1))
+      if (old.length !== parents) {
+        i++
+        continue
+      }
+      let add = cc[4] === undefined ? 1 : Number(cc[4])
+      let n = Number(cc[3])
+      const left = () => add > 0 || old.some((c) => c > 0)
+      i++
+      while (i < lines.length && (left() || lines[i].startsWith('\\'))) {
+        const x = lines[i]
+        if (x.startsWith('\\')) {
+          i++
+          continue
+        }
+        const cols = x.slice(0, parents)
+        if (cols.length !== parents || /[^ +-]/.test(cols)) break
+        if (cols.includes('-')) {
+          for (let p = 0; p < parents; p++) if (cols[p] === '-') old[p]--
+        } else {
+          if (add <= 0) break
+          for (let p = 0; p < parents; p++) if (cols[p] === ' ') old[p]--
+          if (file && !cols.includes(' ')) added.push({ file, line: n, text: x.slice(parents) })
+          n++
+          add--
+        }
+        i++
+      }
+      continue
+    }
     i++
   }
   return { added, files }
@@ -115,7 +157,7 @@ export function parseLog(out) {
 // revs are passed as separate arguments and never start with `-` unless we wrote
 // them: a range from the command line is checked before it gets here.
 export function logCommits(cwd, revs) {
-  const r = git(['log', '-p', ...DIFF, `--format=${FORMAT}`, ...revs, '--'], { cwd })
+  const r = git(['log', '-p', ...MERGES, ...DIFF, `--format=${FORMAT}`, ...revs, '--'], { cwd })
   if (!r.ok) throw new GitError(`git log failed: ${r.err.trim().split('\n')[0]}`)
   return parseLog(r.out)
 }
