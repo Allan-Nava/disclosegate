@@ -48,6 +48,13 @@ test('trailers: every Token: line with an address, Co-authored-by and Signed-off
   ])
 })
 
+test('DG-33: a trailer line ending in a CR is still a trailer, as git reads it; a CR inside one is not', () => {
+  const t = trailers('Subject\r\n\r\nCo-authored-by: Bob <bob@example.internal>\r\nSigned-off-by: Carol\r <carol@example.com>\r\n')
+  assert.deepEqual(t.map((x) => [x.key, x.email, x.name, x.line]), [['Co-authored-by', 'bob@example.internal', 'Bob', 3]])
+  const f = scanCommits([commit({ message: 'x\r\n\r\nCo-authored-by: Bob Example <bob@example.internal>\r\n' })], cfg({ blockedNames: ['Bob Example'] }))
+  assert.deepEqual(kinds(f), ['email/trailer Co-authored-by', 'name/trailer Co-authored-by'])
+})
+
 test('email: an address outside publicEmails is a finding, wherever it sits', () => {
   const c = commit({ committer: { name: 'Bob', email: 'bob@example.internal' }, message: 'x\n\nCo-authored-by: Bob <bob@example.internal>\n' })
   const f = scanCommits([c], cfg())
@@ -331,7 +338,8 @@ test('DG-31: identities — a long name, a tagger without a closing bracket, a w
 })
 
 // The patterns as they were before DG-31, kept as the reference the scans must agree with
-// on every input: same matches, same order, same text.
+// on every input: same matches, same order, same text. The trailer reference drops one
+// CR at the end of a line first, which is DG-33's change and not a pattern's.
 const OLD = {
   text: /[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])/g,
   loose: /[^\s<>"'(),;:@]+@[^\s<>"'(),;:@]+\.[A-Za-z]{2,}/g,
@@ -342,7 +350,7 @@ const oldAll = (re, s) => [...s.matchAll(re)].map((m) => m[0])
 const oldTrailers = (message) => {
   const out = []
   message.split('\n').forEach((line, i) => {
-    const m = line.match(OLD.trailer)
+    const m = (line.endsWith('\r') ? line.slice(0, -1) : line).match(OLD.trailer)
     if (!m) return
     // `split(re).join('')` is `replace(re, '')` for a pattern without groups: the old
     // pattern, not a sanitiser — the name is compared, never rendered.

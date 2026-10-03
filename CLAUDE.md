@@ -151,7 +151,8 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    (`(?=(\s+))\2`), where `\s+(.*)$` gave them back one at a time before a CR; angle
    brackets, a name's trailing blanks and a tagger's `Name <email>` are cut with
    `indexOf`; a wildcard with two stars or more is matched part by part. The results are
-   the old patterns' exactly: `test/rules.test.mjs` keeps each replaced pattern as the
+   the old patterns' exactly — save one CR at a line's end, which the trailer shape drops
+   first, as git does (DG-33): `test/rules.test.mjs` keeps each replaced pattern as the
    reference and holds the scan to it on 20,000 generated inputs, and its timing tests
    run in a child process with a hard stop, because a regex cannot be interrupted in the
    thread that runs it. A new pattern that reads content comes with its timing test. A

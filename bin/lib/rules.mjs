@@ -209,8 +209,11 @@ const TRAILER = /^\s*([A-Za-z][A-Za-z0-9-]*):(?=(\s+))\2(.*)$/
 // whole — `(?=(\s+))\2` is an atomic `\s+` — because `\s+(.*)$` gave it back one
 // character at a time when the value held a CR, quadratic in the run (DG-31); giving
 // it back never made a match, since the CR is still ahead of `.*`.
+// One CR at the end is dropped first, as git's trailer parser does: a message kept with
+// CRLF endings (`--cleanup=verbatim`, `commit-tree`) still has trailers to git, and so
+// to every forge that shows them (DG-33).
 const trailerOf = (line) => {
-  const m = line.match(TRAILER)
+  const m = (line.endsWith('\r') ? line.slice(0, -1) : line).match(TRAILER)
   return m && { key: m[1], value: m[3] }
 }
 

@@ -67,6 +67,17 @@ test('Co-authored-by and Signed-off-by trailers are checked', () => {
   assert.match(r.out, /trailer Signed-off-by/)
 })
 
+test('DG-33: a trailer in a message kept with CRLF endings is checked, as git reads it', () => {
+  const sb = guarded()
+  sb.commit()
+  writeFileSync(join(sb.base, 'msg'), `Pair on the parser\r\n\r\nCo-authored-by: Bob <${BOB.email}>\r\n`)
+  sb.git(['commit', '-q', '--allow-empty', '--cleanup=verbatim', '-F', join(sb.base, 'msg')])
+  assert.match(sb.git(['log', '-1', '--format=%(trailers:key=Co-authored-by,valueonly)']).stdout, /Bob/, 'git reads the trailer')
+  const r = sb.push()
+  assert.notEqual(r.code, 0)
+  assert.match(r.out, /trailer Co-authored-by/)
+})
+
 test('a term in a commit message is refused, case-insensitively', () => {
   const sb = guarded({ publicEmails: [ALICE.email], terms: ['Project Nimbus'] })
   sb.commit({ message: 'wire up project nimbus' })
