@@ -30,6 +30,21 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   one string; `doctor` says what is read and up to where (DG-30).
 
 ### Fixed
+- **Security:** a long line no longer stalls the hook. Addresses in text were found by a
+  regex that started a match at every character of a run of letters and read to the
+  run's end, so a line of n letters cost n²/2 steps whenever `blockedDomains` was set: a
+  commit adding lines of 25k, 50k and 100k letters took 8.5 s, and a 5.3 MB base64url
+  line — a minified bundle, or a binary, read as text since DG-30 — more than five
+  minutes. The push was never let through, since an interrupted hook refuses it, but a
+  guard nobody waits for gets `--no-verify`. Addresses are now found from each `@`
+  outwards. Every other pattern that reads content was audited: the address in a
+  trailer, the trailer shape (blanks before a CR), a trailer name's angle brackets, an
+  author name's trailing blanks, a tagger header and a `publicEmails` wildcard with two
+  stars or more were quadratic too and are linear now; the path patterns already were.
+  The commit takes 0.12 s and the base64 line 0.15 s. Findings are unchanged — held to
+  the old patterns on 20,000 generated inputs each, and compared on 57 real histories.
+  A `/regex/` term is the user's own: the README's new Limits section says what a slow
+  one costs, and that Git LFS content is not read (DG-31).
 - **Security:** a file git prints as `Binary files … differ` is read. A `-diff` or
   `binary` attribute — in `.gitattributes`, `.git/info/attributes` or the user's
   `core.attributesFile` — a diff driver set to `binary`, a `core.bigFileThreshold` and a

@@ -2,9 +2,11 @@
 // path shapes out literally, because it defines them; `disclosegate check` skips it
 // and `.disclosegate.json` exempts it from the path rule, and from nothing else.
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
-import { compileTerm, globToRegExp, mask, matchesGlob, pathMatches, scanCommits, trailers, wildcard } from '../bin/lib/rules.mjs'
-import { parsePatch } from '../bin/lib/git.mjs'
+import { compileTerm, globToRegExp, mask, matchesGlob, pathMatches, scanCommits, textEmails, trailers, wildcard } from '../bin/lib/rules.mjs'
+import { parseCommit, parsePatch, parseTag } from '../bin/lib/git.mjs'
+import { checkEmails } from '../bin/lib/check.mjs'
 
 const commit = (over = {}) => ({
   sha: 'a1b2c3d4e5f60718293a4b5c6d7e8f9012345678',
@@ -259,4 +261,127 @@ test('unread: a file not read in full is a finding of its own, last, under a mas
   assert.deepEqual(kinds(f), ['term/file name', 'path/big.dat:1', 'unread/big.dat', 'unread/ni… (15 chars)'])
   assert.deepEqual(f.filter((x) => x.rule === 'unread').map((x) => x.kind), ['read in part — past the read limit', 'not read — git printed it as binary'])
   assert.deepEqual(scanCommits([commit()], cfg()), [], 'a commit without unread files has no such finding')
+})
+
+// DG-31: every built-in pattern that reads content is linear in the line. Each scan runs in
+// a child process with a hard stop, because a regex cannot be interrupted in the thread
+// that runs it: a quadratic pattern fails here in seconds instead of holding CI for hours.
+// The bounds are generous — the scans take milliseconds; the patterns they replaced took
+// seconds on the same input.
+function timed(body, { limit = 30000 } = {}) {
+  const lib = (f) => JSON.stringify(new URL(`../bin/lib/${f}`, import.meta.url).href)
+  const code = `import * as rules from ${lib('rules.mjs')}\nimport * as git from ${lib('git.mjs')}\nconst t0 = performance.now()\nconst result = (() => { ${body} })()\nprocess.stdout.write(JSON.stringify({ ms: performance.now() - t0, result }))`
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', timeout: limit, maxBuffer: 64 * 1024 * 1024 })
+  assert.equal(r.signal, null, `killed after ${limit} ms — not linear`)
+  assert.equal(r.status, 0, r.stderr)
+  return JSON.parse(r.stdout)
+}
+const SCAN = `const cfg = { publicEmails: ['*@*.example', 'alice@personal.example'], blockedDomains: ['example.internal'], terms: [], blockedNames: [], allowPaths: [] }
+const commit = (over) => ({ sha: 'a'.repeat(40), author: { name: 'A', email: 'alice@personal.example' }, committer: { name: 'A', email: 'alice@personal.example' }, message: 'm\\n', added: [], files: [], ...over })
+const kinds = (fs) => fs.map((f) => f.rule + '/' + f.where + '/' + f.match.length)`
+
+test('DG-31: a 100k-letter line is read in well under a second, and lines of 25k, 50k and 100k together', () => {
+  const one = timed(`${SCAN}
+    return kinds(rules.scanCommits([commit({ added: [{ file: 'a', line: 1, text: 'a'.repeat(100000) }] })], cfg))`)
+  assert.deepEqual(one.result, [])
+  assert.ok(one.ms < 1000, `${one.ms.toFixed(0)} ms`)
+  const three = timed(`${SCAN}
+    const added = [25000, 50000, 100000].map((n, i) => ({ file: 'a', line: i + 1, text: 'x'.repeat(n) }))
+    return kinds(rules.scanCommits([commit({ added })], cfg))`)
+  assert.deepEqual(three.result, [])
+  assert.ok(three.ms < 2000, `${three.ms.toFixed(0)} ms`)
+})
+
+test('DG-31: a base64 blob of a few MB on one line, and random bytes read as text, stay linear', () => {
+  const r = timed(`${SCAN}
+    let x = 7
+    const bytes = Buffer.alloc(3 * 1024 * 1024).map(() => ((x = (Math.imul(x, 1103515245) + 12345) >>> 0) >>> 16) & 255)
+    const added = [{ file: 'blob.b64', line: 1, text: bytes.toString('base64url') }, { file: 'blob.bin', line: 1, text: bytes.toString('latin1') }]
+    return kinds(rules.scanCommits([commit({ added })], cfg))`)
+  assert.deepEqual(r.result, [])
+  assert.ok(r.ms < 5000, `${r.ms.toFixed(0)} ms`)
+})
+
+test('DG-31: an address after a long run of letters is still found, and one that is the run', () => {
+  const r = timed(`${SCAN}
+    const run = 'a'.repeat(100000)
+    const added = [{ file: 'a', line: 1, text: run + ' bob@example.internal' }, { file: 'a', line: 2, text: run + '@mail.example.internal' }, { file: 'a', line: 3, text: run + '.' + run + '@example.internal' }]
+    return kinds(rules.scanCommits([commit({ added })], cfg))`)
+  assert.deepEqual(r.result, ['email/a:1/20', 'email/a:2/100022', 'email/a:3/200018'])
+  assert.ok(r.ms < 1000, `${r.ms.toFixed(0)} ms`)
+})
+
+test('DG-31: a message — trailer values, angle brackets, whitespace before a CR — stays linear', () => {
+  const r = timed(`${SCAN}
+    const n = 100000
+    const message = ['m', '', 'Data: ' + 'a'.repeat(n), 'Data: ' + 'a'.repeat(n) + '@' + 'b'.repeat(n), 'Co-authored-by: ' + '<'.repeat(n), 'Key:' + ' '.repeat(n) + 'x\\ry', 'Co-authored-by: Bob <' + 'b'.repeat(n) + '@x.example>', ''].join('\\n')
+    return kinds(rules.scanCommits([commit({ message })], cfg))`)
+  assert.deepEqual(r.result, [])
+  assert.ok(r.ms < 2000, `${r.ms.toFixed(0)} ms`)
+})
+
+test('DG-31: identities — a long name, a tagger without a closing bracket, a wildcard with two stars — stay linear', () => {
+  const r = timed(`
+    const n = 100000
+    const c = git.parseCommit('tree ' + '0'.repeat(40) + '\\nauthor A' + ' '.repeat(n) + 'x <a@b.example> 1 +0000\\ncommitter C <c@d.example> 1 +0000\\n\\nm\\n')
+    const t = git.parseTag('f'.repeat(40), 'object x\\ntype commit\\ntag v1\\ntagger' + ' <'.repeat(n) + '\\n\\nm\\n')
+    return [c.author.name.length, t.tagger, rules.wildcard('*@*.example').test('@'.repeat(n)), rules.wildcard('*@*.example').test('a'.repeat(n) + '@b.example')]`)
+  assert.deepEqual(r.result, [100002, null, false, true])
+  assert.ok(r.ms < 2000, `${r.ms.toFixed(0)} ms`)
+})
+
+// The patterns as they were before DG-31, kept as the reference the scans must agree with
+// on every input: same matches, same order, same text.
+const OLD = {
+  text: /[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])/g,
+  loose: /[^\s<>"'(),;:@]+@[^\s<>"'(),;:@]+\.[A-Za-z]{2,}/g,
+  check: /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g,
+  trailer: /^\s*([A-Za-z][A-Za-z0-9-]*):\s+(.*)$/,
+}
+const oldAll = (re, s) => [...s.matchAll(re)].map((m) => m[0])
+const oldTrailers = (message) => {
+  const out = []
+  message.split('\n').forEach((line, i) => {
+    const m = line.match(OLD.trailer)
+    if (!m) return
+    // `split(re).join('')` is `replace(re, '')` for a pattern without groups: the old
+    // pattern, not a sanitiser — the name is compared, never rendered.
+    const name = m[2].split(/<[^>]*>/).join('').trim()
+    for (const e of m[2].matchAll(OLD.loose)) out.push({ key: m[1], email: e[0], name, line: i + 1 })
+  })
+  return out
+}
+const oldWildcard = (p) => new RegExp(`^${String(p).split('*').map((x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i')
+const oldTagger = (v) => v.match(/^(.*?) <([^>]*)>/)
+const oldName = (v) => v.replace(/[ \t\r\n]+$/, '')
+
+function fuzz(seed) {
+  let x = seed
+  const rand = (n) => ((x = (Math.imul(x, 1103515245) + 12345) >>> 0) >>> 8) % n
+  const atoms = ['a', 'Z', '7', '.', '-', '_', '%', '+', '@', '@', '.', 'com', 'ex', 'b-c', ' ', '\t', '\r', '\u2028', '\u00a0', '<', '>', ':', 'Key:', 'Co-authored-by: ', '/', '"', ',', 'é', '*', 'A1']
+  return () => {
+    let s = ''
+    for (let i = rand(24); i > 0; i--) s += atoms[rand(atoms.length)]
+    return s
+  }
+}
+
+test('DG-31: the scans agree with the patterns they replaced, on 20,000 generated inputs each', () => {
+  const gen = fuzz(31)
+  for (let i = 0; i < 20000; i++) {
+    const s = gen()
+    assert.deepEqual(textEmails(s), oldAll(OLD.text, s), JSON.stringify(s))
+    assert.deepEqual(checkEmails(s), oldAll(OLD.check, s), JSON.stringify(s))
+    const message = `${gen()}\n${gen()}\n${s}`
+    assert.deepEqual(trailers(message), oldTrailers(message), JSON.stringify(message))
+    const [p, q] = [gen(), gen()]
+    assert.equal(wildcard(p).test(q), oldWildcard(p).test(q), JSON.stringify([p, q]))
+    const tagger = gen()
+    const t = parseTag('f'.repeat(40), `tag v1\ntagger ${tagger}\n\nm\n`).tagger
+    const o = oldTagger(tagger)
+    assert.deepEqual(t, o ? { name: o[1], email: o[2] } : null, JSON.stringify(tagger))
+    const author = gen().replace(/\n/g, '')
+    const lt = author.indexOf('<')
+    if (lt !== -1 && author.indexOf('>', lt + 1) !== -1) assert.equal(parseCommit(`author ${author}\n\nm\n`).author.name, oldName(author.slice(0, lt)), JSON.stringify(author))
+  }
 })

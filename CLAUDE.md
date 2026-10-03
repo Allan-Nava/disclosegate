@@ -36,7 +36,8 @@ bin/lib/               rules (pure: the four rules and `unread`, masking, orderi
                        the moved-aside hook chained after disclosegate),
                        doctor, check (this repository's invariants), changelog
 test/                  node:test suites — rules.test.mjs (units; the only file that spells
-                       the path shapes out), config, cli (scan/install/init/doctor/exit
+                       the path shapes out; DG-31's timing tests and the replaced patterns
+                       kept as references), config, cli (scan/install/init/doctor/exit
                        codes), push (real `git push` through the hook into a bare remote),
                        history (the streamed `--history` held to the collected reading,
                        byte for byte), precommit (`--pre-commit` and a real push through a
@@ -137,6 +138,31 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    `scan --history` 0.16 s before (reading none of them), 5.5 s and 1.1 GB peak RSS
    after; `--text` alone, without the byte reader, took 9.3 s and crashed the hook path
    on a string over V8's limit. Unchanged on six real histories.
+10. **The built-in rules are linear in the line.** Every pattern disclosegate itself runs
+   on content — the addresses in text and in trailers, the trailer shape, a trailer's
+   name, the path patterns, an author name and a tagger header, a `publicEmails`
+   wildcard, `check`'s own address pattern — costs time in proportion to the line, so a
+   minified bundle, a base64 blob or a binary read as text (invariant 9) costs
+   milliseconds; a hook nobody waits for gets `--no-verify` (DG-31). A regex of the shape
+   `[class]+@…` is not linear: it starts a match at every character of a run and reads to
+   the run's end, n²/2 steps on a line of n letters. So addresses are found from each `@`
+   outwards (`addressesIn` in `bin/lib/rules.mjs`), every class a table filled by the
+   class's own regex; the trailer shape takes the blanks after its colon atomically
+   (`(?=(\s+))\2`), where `\s+(.*)$` gave them back one at a time before a CR; angle
+   brackets, a name's trailing blanks and a tagger's `Name <email>` are cut with
+   `indexOf`; a wildcard with two stars or more is matched part by part. The results are
+   the old patterns' exactly: `test/rules.test.mjs` keeps each replaced pattern as the
+   reference and holds the scan to it on 20,000 generated inputs, and its timing tests
+   run in a child process with a hard stop, because a regex cannot be interrupted in the
+   thread that runs it. A new pattern that reads content comes with its timing test. A
+   `/regex/` term is not held to this: it is the user's — or, from the repository file,
+   its committers' (invariant 4) — a budget per line would refuse every minified file for
+   anyone with a regex term, and a time budget cannot stop a regex mid-run without a
+   worker per line. A slow term costs time, never coverage, since an interrupted hook
+   refuses the push (invariant 2); the README's Limits section says so. Measured: a
+   commit adding lines of 25k, 50k and 100k letters, 8.5 s before and 0.12 s after; a
+   5.3 MB base64url line, stopped at 300 s before and 0.15 s after; same output on
+   57 real histories.
 
 ## Verifying a change
 

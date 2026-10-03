@@ -387,7 +387,27 @@ function person(v) {
   const lt = s.indexOf('<')
   const gt = lt === -1 ? -1 : s.indexOf('>', lt + 1)
   if (gt === -1) return { name: '', email: '' }
-  return { name: s.slice(0, lt).replace(/[ \t\r\n]+$/, ''), email: s.slice(lt + 1, gt) }
+  return { name: trimName(s.slice(0, lt)), email: s.slice(lt + 1, gt) }
+}
+
+// The name without the blanks before its `<` — what `.replace(/[ \t\r\n]+$/, '')` gave,
+// without that pattern's restart at every blank of a run that does not end the name,
+// quadratic in the run (DG-31).
+function trimName(s) {
+  let e = s.length
+  while (e > 0 && ' \t\r\n'.includes(s[e - 1])) e--
+  return s.slice(0, e)
+}
+
+// `Name <email>` at the start of a tagger header, as `/^(.*?) <([^>]*)>/` split it: the
+// first ` <` with no line break before it and a `>` somewhere after it — and if the first
+// ` <` has no `>` after it, no later one has. The regex tried every ` <` and read to the
+// end of the line from each (DG-31).
+function splitIdent(v) {
+  const lt = v.indexOf(' <')
+  if (lt === -1 || /[\n\r\u2028\u2029]/.test(v.slice(0, lt))) return null
+  const gt = v.indexOf('>', lt + 2)
+  return gt === -1 ? null : { name: v.slice(0, lt), email: v.slice(lt + 2, gt) }
 }
 
 // The parents a commit object names, in order.
@@ -630,11 +650,10 @@ export function parseTag(sha, body) {
     const sp = l.indexOf(' ')
     if (sp > 0 && !(l.slice(0, sp) in h)) h[l.slice(0, sp)] = l.slice(sp + 1)
   }
-  const who = (h.tagger ?? '').match(/^(.*?) <([^>]*)>/)
   return {
     sha,
     tag: h.tag ?? '',
-    tagger: who ? { name: who[1], email: who[2] } : null,
+    tagger: splitIdent(h.tagger ?? ''),
     message: split === -1 ? '' : text.slice(split + 2),
     added: [],
     files: [],

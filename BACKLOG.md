@@ -213,7 +213,7 @@ and rates are published, the matches are not.
   `--history`. Tests on every path, each shown failing before the fix; same output on
   six real histories; a synthetic one with 336 MiB of random `-diff` blobs takes 5.5 s
   against 0.16 s. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
-- [ ] **DG-31 — A long run of letters makes the address rule quadratic**: `TEXT_EMAIL` in
+- [x] **DG-31 — A long run of letters makes the address rule quadratic**: `TEXT_EMAIL` in
   `bin/lib/rules.mjs` starts a match at every character of a run of `[A-Za-z0-9._%+-]`
   and backtracks to its end looking for `@`, so a line of n such characters costs n²/2
   steps whenever `blockedDomains` is set. A commit adding lines of 25k, 50k and 100k
@@ -222,7 +222,18 @@ and rates are published, the matches are not.
   refuses the push, but a guard nobody waits for gets `--no-verify`. DG-30 widens the
   exposure: binary files are read now. Anchor the match on the `@` (find each `@`, then
   extend left and right) and add a timing test on a long line. Found during DG-30.
-  <!-- dg: prio=med size=S labels=rules -->
+  Done 2026-10-03: addresses are found from each `@` outwards (`addressesIn`), every
+  class a table filled by its own regex. The audit of every pattern that reads content
+  found six more quadratic ones, all linear now: the trailer address, the trailer shape
+  (`\s+(.*)$` before a CR, now an atomic run), a trailer name's `<…>`, an author name's
+  trailing blanks, a tagger's `Name <email>` and a `publicEmails` wildcard with two
+  stars or more — plus `check`'s own address pattern; the path patterns were linear.
+  Findings are the old patterns' exactly: tests keep each one as the reference on 20,000
+  generated inputs, and 57 real histories give byte-identical output. Timing tests in
+  a child process with a hard stop, each shown failing or killed on main: 25k/50k/100k
+  letters 8.5 s → 0.12 s, a 5.3 MB base64url line killed at 300 s → 0.15 s. A `/regex/`
+  term stays the user's — documented in a new README Limits section, with LFS (DG-32).
+  <!-- dg: prio=med size=S labels=rules ver=main -->
 - [ ] **DG-32 — Git LFS content is not read**: a file tracked by Git LFS is a pointer in
   the commit, and its content goes to the LFS server through git-lfs's own pre-push
   hook, beside the push disclosegate reads — so a work address in an LFS-tracked file
@@ -230,4 +241,15 @@ and rates are published, the matches are not.
   objects `git lfs pre-push` would upload (`git lfs ls-files` over the pushed range, the
   local `.git/lfs/objects`), or at least report each pointer as `unread`; and check that
   the chained-hook order lets disclosegate run before git-lfs uploads. Found during DG-30.
-  <!-- dg: prio=med size=M labels=rules,hook -->
+  The README's Limits section states it meanwhile. <!-- dg: prio=med size=M labels=rules,hook -->
+- [ ] **DG-33 — A trailer that ends in a CR is not read as a trailer**: `trailers()` in
+  `bin/lib/rules.mjs` takes a line as `Token: value` only when `.*$` reaches its end, and
+  `.` stops at a CR, so a message kept with CRLF line endings (`git commit
+  --cleanup=verbatim`, `commit-tree`, a tool writing the object) has no trailers to the
+  guard — while `git log --format=%(trailers)` reads a `Co-authored-by:` there, and a
+  forge may show it. An address in it is still read as text, so `blockedDomains` holds,
+  but `publicEmails` and `blockedNames` never see it: a co-author outside the allowlist
+  passes. Strip one trailing CR before matching, as git's trailer parser does, and test
+  it on a real verbatim commit. Changes findings, so it was kept out of DG-31, whose
+  results had to stay byte-identical. Found during DG-31.
+  <!-- dg: prio=med size=S labels=rules -->
