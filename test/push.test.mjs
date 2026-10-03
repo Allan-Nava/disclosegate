@@ -230,3 +230,47 @@ test('a user file that is a symlink to a file outside the repository is read as 
   assert.equal(r.code, 0, r.out)
   assert.ok(sb.remoteHas('refs/heads/main'))
 })
+
+// An annotated tag is an object of its own: its tagger and its message are published
+// with it, even when every commit it points at is already on the remote.
+const tag = (sb, args, who = ALICE) => sb.git(['tag', ...args], { extraEnv: { GIT_COMMITTER_NAME: who.name, GIT_COMMITTER_EMAIL: who.email } })
+
+test('an annotated tag whose tagger is a work address is refused, though its commit is public', () => {
+  const sb = guarded()
+  sb.commit()
+  assert.equal(sb.push().code, 0)
+  tag(sb, ['-a', 'v1', '-m', 'Release 1'], BOB)
+  const r = sb.push(['origin', 'v1'])
+  assert.notEqual(r.code, 0, r.out)
+  assert.ok(!sb.remoteHas('refs/tags/v1'), 'the tag did not reach the remote')
+  assert.match(r.out, /email\s+[0-9a-f]{7}\s+tagger\s+bo… \(20 chars\)\s+not in publicEmails/)
+  assert.match(r.out, /1 finding in 1 of 1 tag /)
+  assert.doesNotMatch(r.out, /bob@example\.internal/)
+})
+
+test('a tag message is read — terms, paths, trailers — through a tag of a tag', () => {
+  const sb = guarded({ publicEmails: [ALICE.email], terms: ['Project Nimbus'] })
+  sb.commit()
+  assert.equal(sb.push().code, 0)
+  tag(sb, ['-a', 'inner', '-m', `Release\n\nSigned-off-by: Bob <${BOB.email}>`])
+  tag(sb, ['-a', 'outer', 'inner', '-m', `Ship project nimbus from ${HOME_PATH}`])
+  const r = sb.push(['origin', 'outer'])
+  assert.notEqual(r.code, 0, r.out)
+  assert.match(r.out, /trailer Signed-off-by/)
+  assert.match(r.out, /term\s+[0-9a-f]{7}\s+tag message\s+pr… \(14 chars\)/)
+  assert.match(r.out, /path\s+[0-9a-f]{7}\s+tag message/)
+  assert.match(r.out, /in 2 of 2 tags/)
+})
+
+test('a clean annotated tag is pushed, and a lightweight one is its commit', () => {
+  const sb = guarded()
+  sb.commit()
+  assert.equal(sb.push().code, 0)
+  tag(sb, ['-a', 'v1', '-m', 'Release 1'])
+  const r = sb.push(['origin', 'v1'])
+  assert.equal(r.code, 0, r.out)
+  assert.ok(sb.remoteHas('refs/tags/v1'))
+  assert.match(r.out, /1 tag checked — clean/)
+  tag(sb, ['v1-light'], BOB)
+  assert.equal(sb.push(['origin', 'v1-light']).code, 0, 'a lightweight tag has no tagger to check')
+})

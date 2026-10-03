@@ -127,6 +127,7 @@ export function logCommits(cwd, revs) {
 // the new-branch rule is the only safe reading.
 export function pushRevSets(stdin, remoteName, cwd) {
   const sets = []
+  const tips = []
   let deletions = 0
   for (const raw of String(stdin).split('\n')) {
     const line = raw.trim()
@@ -138,16 +139,91 @@ export function pushRevSets(stdin, remoteName, cwd) {
       deletions++
       continue
     }
+    tips.push(local)
     if (isZero(remote) || !hasCommit(cwd, remote)) sets.push([local, '--not', `--remotes=${remoteName}`])
     else sets.push([`${remote}..${local}`])
   }
-  return { sets, deletions }
+  return { sets, tips, deletions }
 }
 
 export function commitsForSets(cwd, sets) {
   const seen = new Map()
   for (const revs of sets) for (const c of logCommits(cwd, revs)) if (!seen.has(c.sha)) seen.set(c.sha, c)
   return [...seen.values()]
+}
+
+// Objects by sha through one `git cat-file --batch`, read as bytes: the size git
+// prints is a byte count, and a message in UTF-8 has more bytes than characters.
+function catObjects(cwd, shas) {
+  const r = spawnSync('git', [...PINNED, 'cat-file', '--batch'], { cwd, input: `${shas.join('\n')}\n`, maxBuffer: 1 << 30 })
+  if (r.error) throw new GitError(`git could not be run: ${r.error.code ?? r.error.message}`)
+  if (r.status !== 0) throw new GitError(`git cat-file failed: ${String(r.stderr).trim().split('\n')[0]}`)
+  const buf = r.stdout
+  const objects = []
+  let i = 0
+  while (i < buf.length) {
+    const nl = buf.indexOf(10, i)
+    if (nl === -1) break
+    const [sha, type, size] = buf.toString('utf8', i, nl).split(' ')
+    if (type === 'missing' || size === undefined) {
+      i = nl + 1
+      continue
+    }
+    const end = nl + 1 + Number(size)
+    objects.push({ sha, type, body: buf.toString('utf8', nl + 1, end) })
+    i = end + 1
+  }
+  return objects
+}
+
+// An annotated tag object: `object`, `type`, `tag` and `tagger` headers, a blank line,
+// the message (a signature, when there is one, is the end of the message). A header
+// that continues on lines beginning with a space is skipped whole.
+export function parseTag(sha, body) {
+  const text = String(body)
+  const split = text.indexOf('\n\n')
+  const head = split === -1 ? text : text.slice(0, split)
+  const h = {}
+  for (const l of head.split('\n')) {
+    const sp = l.indexOf(' ')
+    if (sp > 0 && !(l.slice(0, sp) in h)) h[l.slice(0, sp)] = l.slice(sp + 1)
+  }
+  const who = (h.tagger ?? '').match(/^(.*?) <([^>]*)>/)
+  return {
+    sha,
+    tag: h.tag ?? '',
+    tagger: who ? { name: who[1], email: who[2] } : null,
+    message: split === -1 ? '' : text.slice(split + 2),
+    added: [],
+    files: [],
+    target: { sha: h.object, type: h.type },
+  }
+}
+
+// The annotated tags among `shas`, and the tags they point at in turn: a tag of a tag
+// publishes both. A sha that names a commit is not a tag and is left to `git log`.
+export function tagsAt(cwd, shas) {
+  const seen = new Map()
+  let pending = [...new Set(shas)]
+  while (pending.length) {
+    const next = []
+    for (const o of catObjects(cwd, pending)) {
+      if (o.type !== 'tag' || seen.has(o.sha)) continue
+      const t = parseTag(o.sha, o.body)
+      seen.set(o.sha, t)
+      if (t.target.type === 'tag' && isSha(t.target.sha ?? '')) next.push(t.target.sha)
+    }
+    pending = next.filter((s) => !seen.has(s))
+  }
+  return [...seen.values()]
+}
+
+// Every annotated tag a ref points at — what `--all` reaches beyond the commits.
+export function allTags(cwd) {
+  const r = git(['for-each-ref', '--format=%(objecttype) %(objectname)'], { cwd })
+  if (!r.ok) throw new GitError(`git for-each-ref failed: ${r.err.trim().split('\n')[0]}`)
+  const shas = r.out.split('\n').filter((l) => l.startsWith('tag ')).map((l) => l.slice(4))
+  return shas.length ? tagsAt(cwd, shas) : []
 }
 
 const ident = (cwd, v) => {

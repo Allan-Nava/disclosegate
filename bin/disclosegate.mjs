@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { check } from './lib/check.mjs'
 import { ConfigError, inside, loadConfig, remoteVerdict, TEMPLATE, tildify, userConfigPath } from './lib/config.mjs'
 import { doctor } from './lib/doctor.mjs'
-import { commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit } from './lib/git.mjs'
+import { allTags, commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit, tagsAt } from './lib/git.mjs'
 import { hooksDir, install, uninstall } from './lib/hook.mjs'
 import { formatText, toJSON } from './lib/report.mjs'
 import { scanCommits } from './lib/rules.mjs'
@@ -64,7 +64,8 @@ function report(commits, cfg, warnings, { json, show, context }) {
   const reveal = !!show && !!process.stdout.isTTY
   if (show && !reveal) err('disclosegate: --show prints matches only when stdout is a terminal — masked')
   for (const w of warnings) err(`disclosegate: ${w}`)
-  const opts = { reveal, mode: cfg.mode, context, commits: commits.length, version: VERSION, warnings }
+  const tags = commits.filter((c) => c.tag != null).length
+  const opts = { reveal, mode: cfg.mode, context, commits: commits.length - tags, tags, version: VERSION, warnings }
   out(json ? toJSON(findings, opts) : formatText(findings, opts))
   return findings.length && cfg.mode === 'block' ? 1 : 0
 }
@@ -80,8 +81,8 @@ function prePush(args, cwd) {
     err(`disclosegate: remote ${remoteName} is not enforced (${v.reason}) — not checked`)
     return 0
   }
-  const { sets } = pushRevSets(readFileSync(0, 'utf8'), remoteName, cwd)
-  const commits = commitsForSets(cwd, sets)
+  const { sets, tips } = pushRevSets(readFileSync(0, 'utf8'), remoteName, cwd)
+  const commits = [...commitsForSets(cwd, sets), ...(tips.length ? tagsAt(cwd, tips) : [])]
   return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
 }
 
@@ -92,7 +93,7 @@ function scan(args, cwd) {
   const { effective, warnings } = loadConfig({ repoRoot: root })
   let commits
   if (flags.staged) commits = [stagedCommit(cwd)]
-  else if (flags.history) commits = logCommits(cwd, ['--all'])
+  else if (flags.history) commits = [...logCommits(cwd, ['--all']), ...allTags(cwd)]
   else if (flags.range) commits = logCommits(cwd, [flags.range])
   else {
     const revs = defaultRevs(cwd)

@@ -174,3 +174,10 @@ test('parsePatch: new-side line numbers, no context, and a line that starts with
   ])
   assert.deepEqual(files, ['a.txt', 'sp ace\tx'])
 })
+
+test('a tag: the tagger is read like a committer, its message like a commit message', () => {
+  const t = { sha: 'f'.repeat(40), tag: 'v1', tagger: { name: 'Bob Example', email: 'bob@example.internal' }, message: 'Release nimbus\n\nCo-authored-by: Carol <carol@example.com>\n', added: [], files: [] }
+  const f = scanCommits([t], cfg({ terms: [compileTerm('nimbus')], blockedNames: ['Bob Example'] }))
+  assert.deepEqual(kinds(f), ['email/tagger', 'email/trailer Co-authored-by', 'term/tag message', 'name/tagger'])
+  assert.ok(f.every((x) => x.tag), 'a finding on a tag says so')
+})

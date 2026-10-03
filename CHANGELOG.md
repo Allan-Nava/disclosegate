@@ -5,6 +5,12 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+### Added
+- An annotated tag is read: its tagger is checked like a committer (`email`, `name`) and
+  its message like a commit message (`term`, `path`, trailers), in the hook and in `scan
+  --history` — and so is a tag it points at. A tag is counted apart from the commits, and
+  `--json` carries a `tags` count (DG-18).
+
 ### Changed
 - The backlog check, the roadmap, the issue sync and the release-drift check are
   [backlogsync](https://github.com/Allan-Nava/backlogsync) 0.1.0, configured in

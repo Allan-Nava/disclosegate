@@ -5,11 +5,11 @@
 A public repository publishes more than its code: every commit carries an author and a
 committer address, its message can name a private host or a client, and an added line
 can hold the absolute path of someone's home directory. disclosegate is a **pre-push
-hook** that reads what a push is about to send — the commits' metadata and messages, and
-the lines each commit adds — and **refuses the push** when it finds what your own rule
-says must not be public. It checks *before*, because after is too late: once a commit is
-on a forge it stays reachable by its SHA even when a force-push has removed it from
-every branch.
+hook** that reads what a push is about to send — the commits' metadata and messages, the
+lines each commit adds, and the tagger and message of an annotated tag — and **refuses
+the push** when it finds what your own rule says must not be public. It checks *before*,
+because after is too late: once a commit is on a forge it stays reachable by its SHA even
+when a force-push has removed it from every branch.
 
 > **Status: 0.0.2, on npm — run it in `audit` mode.** The hook, the four rules, the
 > config with its trust order, `scan`, `install`, `init`, `doctor` and `check` are
@@ -67,6 +67,7 @@ git runs the hook with the remote's name and URL, and one line per ref on stdin:
 | deletes a branch | nothing — a deletion publishes nothing |
 | creates a branch | every commit no ref of that remote already has: `git rev-list <local> --not --remotes=<remote>` |
 | updates a branch | `<remote-sha>..<local-sha>`; if this repository lacks the remote tip, the new-branch rule |
+| pushes an annotated tag | the tag object — its tagger and message, and those of a tag it points at — and its commits by the two rules above |
 
 A finding refuses the whole push, and nothing reaches the remote:
 
@@ -125,10 +126,10 @@ still runs, and `doctor` says what is missing.
 
 | Rule | Reads | A finding when |
 |---|---|---|
-| `email` | author, committer, every trailer address (`Co-authored-by:`, `Signed-off-by:`, any `Token: … <address>`) | the address is not in `publicEmails` (off while that list is empty); or its domain, or a parent of it, is in `blockedDomains` — whatever `publicEmails` says |
-| `term` | commit messages, added lines, the names of files with added lines | an entry of `terms` matches: a plain string case-insensitively, `/source/flags` as a regular expression |
-| `path` | commit messages, added lines | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` or a `file:///` URL naming a path. Built in, always on; a URL such as `https://example.com/home/about/` is not a home |
-| `name` | author, committer and trailer names | the name is in `blockedNames` |
+| `email` | author, committer, tagger, every trailer address (`Co-authored-by:`, `Signed-off-by:`, any `Token: … <address>`) | the address is not in `publicEmails` (off while that list is empty); or its domain, or a parent of it, is in `blockedDomains` — whatever `publicEmails` says |
+| `term` | commit and tag messages, added lines, the names of files with added lines | an entry of `terms` matches: a plain string case-insensitively, `/source/flags` as a regular expression |
+| `path` | commit and tag messages, added lines | `/Users/<name>/`, `/home/<name>/`, `C:\Users\<name>\` or a `file:///` URL naming a path. Built in, always on; a URL such as `https://example.com/home/about/` is not a home |
+| `name` | author, committer, tagger and trailer names | the name is in `blockedNames` |
 
 Findings are listed worst first: a blocked domain, an address outside the allowlist, a
 term, a name, a path. A file whose *name* carries a term is never printed by name; its
@@ -136,11 +137,11 @@ lines are shown under a masked one.
 
 ## Output
 
-Every finding has the commit's short sha, where it is (`author`, `committer`,
-`trailer Co-authored-by`, `message`, `file:line`, `file name`), the rule, and the match
-**masked** — its first two characters, an ellipsis and its length. The output of a hook
-lands in terminals, CI logs and pasted issues, and a guard that printed what it found
-would publish it itself. `--show` prints matches in full, and only when stdout is a
+Every finding has the commit's short sha — or the tag object's — where it is (`author`,
+`committer`, `tagger`, `trailer Co-authored-by`, `message`, `tag message`, `file:line`,
+`file name`), the rule, and the match **masked** — its first two characters, an ellipsis
+and its length. The output of a hook lands in terminals, CI logs and pasted issues, and a
+guard that printed what it found would publish it itself. `--show` prints matches in full, and only when stdout is a
 terminal; elsewhere it is ignored with a note. Paths under your home directory are shown
 with `~`.
 
@@ -154,7 +155,7 @@ configuration error — which, in the hook, also refuses the push.
 disclosegate scan                    # what a push would send now: @{upstream}..HEAD, or what no remote has
 disclosegate scan --range main..HEAD
 disclosegate scan --staged           # the index, and the identity the next commit would carry
-disclosegate scan --history          # every commit reachable from any ref — the audit of a repository
+disclosegate scan --history          # every commit and annotated tag reachable from any ref — the audit of a repository
 disclosegate install [--force] | uninstall
 disclosegate init                    # the template user file; refuses to overwrite
 disclosegate doctor                  # config found, rules active, hook installed, remotes enforced

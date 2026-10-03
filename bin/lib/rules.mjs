@@ -3,8 +3,9 @@
 // without a repository (test/rules.test.mjs).
 //
 // A commit is { sha, author: {name, email}, committer: {name, email}, message,
-// added: [{ file, line, text }], files: [path, ...] }. A finding is
-// { sha, short, where, rule, kind, match, rank }.
+// added: [{ file, line, text }], files: [path, ...] }. An annotated tag has the same
+// shape with { tag: <name>, tagger: {name, email} } in place of author and committer,
+// and nothing added. A finding is { sha, short, where, rule, kind, match, rank, tag }.
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -145,9 +146,10 @@ export function scanCommits(commits, cfg) {
   const allowPaths = cfg.allowPaths ?? []
 
   commits.forEach((c, ci) => {
+    const isTag = c.tag != null
     const add = (f) => {
       const key = f.rule === 'email' ? `email:${f.kind === 'blocked domain' ? 'blocked' : 'unlisted'}` : f.rule
-      out.push({ sha: c.sha, short: c.sha.slice(0, 7), ci, rank: RANK[key], ...f })
+      out.push({ sha: c.sha, short: c.sha.slice(0, 7), ci, rank: RANK[key], tag: isTag, ...f })
     }
     const email = (where, address) => {
       if (!address) return
@@ -168,7 +170,7 @@ export function scanCommits(commits, cfg) {
       for (const h of pathMatches(text)) add({ where, rule: 'path', kind: h.kind, match: h.match })
     }
 
-    for (const [where, id] of [['author', c.author], ['committer', c.committer]]) {
+    for (const [where, id] of [['author', c.author], ['committer', c.committer], ['tagger', c.tagger]]) {
       if (!id) continue
       email(where, id.email)
       name(where, id.name)
@@ -177,9 +179,10 @@ export function scanCommits(commits, cfg) {
       email(`trailer ${t.key}`, t.email)
       name(`trailer ${t.key}`, t.name)
     }
+    const msg = isTag ? 'tag message' : 'message'
     for (const line of String(c.message ?? '').split('\n')) {
-      termsIn('message', line)
-      pathsIn('message', line)
+      termsIn(msg, line)
+      pathsIn(msg, line)
     }
     // A file's name is published with it. One that carries a term is a finding, and
     // it is never printed: every line in it is shown under a masked name instead.

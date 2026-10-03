@@ -134,9 +134,12 @@ and rates are published, the matches are not.
 
 ## v0.2.0 — What the first version does not read <!-- ms: phase=later -->
 
-- [ ] **DG-18 — Annotated tags**: a pushed annotated tag carries a tagger identity and a
-  message; neither is checked yet — only the commits it points at are.
-  <!-- dg: prio=med size=S labels=rules,hook -->
+- [x] **DG-18 — Annotated tags**: a pushed annotated tag carries a tagger identity and a
+  message; neither is checked yet — only the commits it points at are. Done 2026-10-03:
+  the pushed tips that are tag objects, and a tag they point at, are read through one
+  `git cat-file --batch`; the tagger goes through the email and name rules, the message
+  through terms, paths and trailers; `scan --history` reads every annotated tag a ref
+  points at. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
 - [ ] **DG-19 — A merge's own changes**: `git log -p` shows no diff for a merge, so a
   line added while resolving a conflict is not read. `--cc` shows only those lines;
   parse its combined format. <!-- dg: prio=med size=M labels=rules,hook -->

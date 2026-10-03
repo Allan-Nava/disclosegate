@@ -4,7 +4,7 @@
 
 > This page is **generated** from [BACKLOG.md](BACKLOG.md), the single source of truth for planned work. Regenerate it with `npm run roadmap` after editing the backlog — CI fails when the two disagree.
 
-**28 items · 17 shipped · 11 open · 3 milestones.**
+**28 items · 18 shipped · 10 open · 3 milestones.**
 
 ## At a glance
 
@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | **v0.0.1 — The guard, test-first** | now | `##########` 100% | 0 | 13 |
 | **v0.1.0 — A week in audit mode** | next | `#####.....` 50% | 4 | 4 |
-| **v0.2.0 — What the first version does not read** | later | `..........` 0% | 7 | 0 |
+| **v0.2.0 — What the first version does not read** | later | `#.........` 14% | 6 | 1 |
 
 ## v0.0.1 — The guard, test-first
 
@@ -43,7 +43,7 @@
 
 ## v0.2.0 — What the first version does not read
 
-- [ ] **DG-18** — Annotated tags · med · S · rules, hook
+- [x] **DG-18** — Annotated tags · med · S · rules, hook · `main`
 - [ ] **DG-19** — A merge's own changes · med · M · rules, hook
 - [ ] **DG-20** — blockedDomains in text · med · S · rules
 - [ ] **DG-21** — Chain a moved-aside hook · low · S · hook, enhancement
