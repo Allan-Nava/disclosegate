@@ -55,6 +55,7 @@ test/                  node:test suites — rules.test.mjs (units; the only file
 site/build.mjs         generates site/dist/index.html FROM README.md; adds only the command
                        inventory read off bin/disclosegate.mjs
 assets/                logo.svg (single source for favicon, site, README), social-preview.html
+                       and the social-preview.png rendered from it — the page's og:image
 .pre-commit-hooks.yaml the pre-commit framework's definition: a pre-push stage hook calling
                        `pre-push --pre-commit`, which reads PRE_COMMIT_* instead of stdin;
                        `check` holds its six load-bearing keys
@@ -200,6 +201,13 @@ an invariant.
   site and never reaches the tarball.
 - **The site has no prose of its own.** Edit README.md and rebuild; the generator adds
   only the command list, from the CLI's header comment.
+- **The social card is rendered, never drawn.** `assets/social-preview.png` (the page's
+  `og:image`, and what goes under Settings → General → Social preview) comes from
+  `assets/social-preview.html`; re-render it whenever the card's text goes stale:
+  `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new
+  --disable-gpu --hide-scrollbars --allow-file-access-from-files --window-size=1280,640
+  --screenshot=assets/social-preview.png --virtual-time-budget=2500
+  "file://$PWD/assets/social-preview.html"` (DG-23).
 - Prose: British-leaning spelling, em-dashes, no marketing filler, no decorative emoji.
 - **Nothing private in any file**: no real address, hostname, client or repository
   name, no path under a real home directory. Run `scan --history` before pushing.

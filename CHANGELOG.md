@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+### Added
+- The site has a social card: `assets/social-preview.png`, rendered from
+  `assets/social-preview.html` with headless Chrome, named in the page's `og:image` and
+  `twitter:image`. The npm package does not carry it (DG-23).
+
 ### Fixed
 - A trailer line that ends in a CR is read as a trailer, as git's own parser reads it. A
   message kept with CRLF endings (`git commit --cleanup=verbatim`, `commit-tree`, a tool
