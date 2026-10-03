@@ -242,7 +242,7 @@ and rates are published, the matches are not.
   local `.git/lfs/objects`), or at least report each pointer as `unread`; and check that
   the chained-hook order lets disclosegate run before git-lfs uploads. Found during DG-30.
   The README's Limits section states it meanwhile. <!-- dg: prio=med size=M labels=rules,hook -->
-- [ ] **DG-33 — A trailer that ends in a CR is not read as a trailer**: `trailers()` in
+- [x] **DG-33 — A trailer that ends in a CR is not read as a trailer**: `trailers()` in
   `bin/lib/rules.mjs` takes a line as `Token: value` only when `.*$` reaches its end, and
   `.` stops at a CR, so a message kept with CRLF line endings (`git commit
   --cleanup=verbatim`, `commit-tree`, a tool writing the object) has no trailers to the
@@ -251,8 +251,9 @@ and rates are published, the matches are not.
   but `publicEmails` and `blockedNames` never see it: a co-author outside the allowlist
   passes. Strip one trailing CR before matching, as git's trailer parser does, and test
   it on a real verbatim commit. Changes findings, so it was kept out of DG-31, whose
-  results had to stay byte-identical. Found during DG-31.
-  <!-- dg: prio=med size=S labels=rules -->
+  results had to stay byte-identical. Found during DG-31. Done: `trailerOf()` drops one
+  trailing CR, tested on a real `--cleanup=verbatim` commit.
+  <!-- dg: prio=med size=S labels=rules ver=main -->
 - [x] **DG-34 — `init` checks for the user file, then writes it**: CodeQL's
   `js/file-system-race`, alerts 2 and 3, 2026-10-03. `init` in `bin/disclosegate.mjs`
   asked `existsSync` whether the user file was there and then called `writeFileSync`,

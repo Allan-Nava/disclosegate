@@ -5,6 +5,15 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+### Fixed
+- A trailer line that ends in a CR is read as a trailer, as git's own parser reads it. A
+  message kept with CRLF endings (`git commit --cleanup=verbatim`, `commit-tree`, a tool
+  writing the object) had no trailers to the guard, so a `Co-authored-by:` address outside
+  `publicEmails`, or a name in `blockedNames`, passed while `git log --format=%(trailers)`
+  and a forge showed it; `blockedDomains` still caught the address as message text. One CR
+  is dropped before the trailer shape is matched; a CR inside the line still ends it. This
+  changes findings: a push that passed may now be refused (DG-33).
+
 ## [0.0.4] — 2026-10-03
 
 0.0.4 is a security release (DG-29 forged commit framing, DG-30 binary and `-diff` content
