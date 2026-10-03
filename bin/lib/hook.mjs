@@ -1,7 +1,7 @@
 // The pre-push hook: where it goes, what it says, and the rule that disclosegate
 // only ever overwrites or removes a hook it wrote itself — recognised by MARKER. A
 // foreign hook moved aside with --force is chained, not dropped.
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, constants, copyFileSync, linkSync, lstatSync, mkdirSync, readFileSync, readlinkSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { git } from './git.mjs'
@@ -63,10 +63,33 @@ printf '%s' "$DG_IN" | "$DG_NEXT" "$@"
 `
 }
 
+// One read, no existence check before it: what the state says is what was read (DG-35).
 export const hookState = (file) => {
-  if (!existsSync(file)) return 'none'
-  return readFileSync(file, 'utf8').includes(MARKER) ? 'ours' : 'foreign'
+  try {
+    return readFileSync(file, 'utf8').includes(MARKER) ? 'ours' : 'foreign'
+  } catch (e) {
+    if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return 'none'
+    throw e
+  }
 }
+
+// `from` moved to `to` unless something is already at `to`. A rename would replace it
+// silently, so the new name is made exclusively — a hard link, or for a symbolic link a
+// copy of the link, since macOS link() follows one — and fails with EEXIST; only then is
+// `from` removed (DG-35). A file system without hard links gets an exclusive copy.
+function moveNoClobber(from, to) {
+  if (lstatSync(from).isSymbolicLink()) symlinkSync(readlinkSync(from), to)
+  else {
+    try {
+      linkSync(from, to)
+    } catch (e) {
+      if (!['EPERM', 'ENOTSUP', 'ENOSYS', 'EXDEV'].includes(e.code)) throw e
+      copyFileSync(from, to, constants.COPYFILE_EXCL)
+    }
+  }
+  unlinkSync(from)
+}
+const taken = (e) => e.code === 'EEXIST'
 
 export function install({ dir, force, node, script }) {
   const file = join(dir, 'pre-push')
@@ -75,11 +98,22 @@ export function install({ dir, force, node, script }) {
   if (state === 'foreign') {
     if (!force) return { ok: false, file, message: `a pre-push hook that disclosegate did not write is already there — left alone. \`disclosegate install --force\` moves it to pre-push${BACKUP_SUFFIX}, where it runs after disclosegate.` }
     moved = file + BACKUP_SUFFIX
-    if (existsSync(moved)) return { ok: false, file, message: `pre-push${BACKUP_SUFFIX} already exists — move one of the two hooks yourself first` }
-    renameSync(file, moved)
+    try {
+      moveNoClobber(file, moved)
+    } catch (e) {
+      if (!taken(e)) throw e
+      return { ok: false, file, message: `pre-push${BACKUP_SUFFIX} already exists — move one of the two hooks yourself first` }
+    }
   }
   mkdirSync(dir, { recursive: true })
-  writeFileSync(file, hookScript({ node, script }))
+  // Where nothing was read, nothing is overwritten: a hook that appeared since, or a
+  // link to a missing file — which a plain write would create through — is refused.
+  try {
+    writeFileSync(file, hookScript({ node, script }), { flag: state === 'ours' ? 'w' : 'wx' })
+  } catch (e) {
+    if (!taken(e)) throw e
+    return { ok: false, file, moved, message: `something is at pre-push that could not be read as a hook (a link to a missing file?) — left alone${moved ? `; the hook moved aside is at pre-push${BACKUP_SUFFIX}` : ''}` }
+  }
   chmodSync(file, 0o755)
   return { ok: true, file, moved, updated: state === 'ours' }
 }
@@ -92,9 +126,13 @@ export function uninstall({ dir }) {
   unlinkSync(file)
   const backup = file + BACKUP_SUFFIX
   let restored = false
-  if (existsSync(backup)) {
-    renameSync(backup, file)
+  try {
+    moveNoClobber(backup, file)
     restored = true
+  } catch (e) {
+    if (e.code === 'ENOENT') return { ok: true, file, removed: true, restored }
+    if (!taken(e)) throw e
+    return { ok: false, file, message: `removed, but a new pre-push appeared — pre-push${BACKUP_SUFFIX} was left where it is` }
   }
   return { ok: true, file, removed: true, restored }
 }
