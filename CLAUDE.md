@@ -24,7 +24,8 @@ run on it.
 bin/disclosegate.mjs   the CLI: pre-push · scan · install · uninstall · init · doctor · check;
                        its header comment is the usage text and the site's command list
 bin/lib/               rules (pure: the four rules, masking, ordering — no fs, no git), git
-                       (one `git log -p --cc -U0` pass, settings pinned; annotated tags
+                       (one `git log -p --cc -U0` pass, settings pinned — streamed a
+                       commit at a time for `scan --history`; annotated tags
                        through one `cat-file --batch`; the pre-push protocol; the patch
                        parser, a merge's combined hunks included),
                        config (user file → repository file, the trust order, remotes,
@@ -35,7 +36,8 @@ bin/lib/               rules (pure: the four rules, masking, ordering — no fs,
 test/                  node:test suites — rules.test.mjs (units; the only file that spells
                        the path shapes out), config, cli (scan/install/init/doctor/exit
                        codes), push (real `git push` through the hook into a bare remote),
-                       changelog; helpers.mjs builds the sandbox
+                       history (the streamed `--history` held to the collected reading,
+                       byte for byte), changelog; helpers.mjs builds the sandbox
 .disclosegate.json     this repository's own repo config: allowPaths for rules.test.mjs only
 .github/workflows/     ci.yml (npm test on Node 18/20/22/24 without npm install; the tool on
                        its own history; a refused push by hand; pack; backlog), release.yml
@@ -78,7 +80,10 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
    diffs — and parses hunks by their counts, so an added line that begins with `++ ` is
    content. A merge is read through `--cc`, its combined hunks by the same counts, and
-   only a line new to every parent is its own.
+   only a line new to every parent is its own. `scan --history` streams the same pass
+   (`streamCommits`, `splitLog`) and holds findings, never commits; whatever it reads
+   must print exactly what the collected reading (`logCommits`) would — `history.test.mjs`
+   says so.
 
 ## Verifying a change
 

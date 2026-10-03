@@ -17,10 +17,10 @@ import { fileURLToPath } from 'node:url'
 import { check } from './lib/check.mjs'
 import { ConfigError, inside, loadConfig, remoteVerdict, TEMPLATE, tildify, userConfigPath } from './lib/config.mjs'
 import { doctor } from './lib/doctor.mjs'
-import { allTags, commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit, tagsAt } from './lib/git.mjs'
+import { allTags, commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit, streamCommits, tagsAt } from './lib/git.mjs'
 import { hooksDir, install, uninstall } from './lib/hook.mjs'
 import { formatText, toJSON } from './lib/report.mjs'
-import { scanCommits } from './lib/rules.mjs'
+import { scanner, scanCommits, sortFindings } from './lib/rules.mjs'
 
 const SCRIPT = fileURLToPath(import.meta.url)
 const ROOT = resolve(dirname(SCRIPT), '..')
@@ -59,13 +59,16 @@ function needRepo(cwd) {
   return root
 }
 
-function report(commits, cfg, warnings, { json, show, context }) {
-  const findings = scanCommits(commits, cfg)
+function report(commits, cfg, warnings, opts) {
+  const tags = commits.filter((c) => c.tag != null).length
+  return reportFindings(scanCommits(commits, cfg), { commits: commits.length - tags, tags }, cfg, warnings, opts)
+}
+
+function reportFindings(findings, { commits, tags }, cfg, warnings, { json, show, context }) {
   const reveal = !!show && !!process.stdout.isTTY
   if (show && !reveal) err('disclosegate: --show prints matches only when stdout is a terminal — masked')
   for (const w of warnings) err(`disclosegate: ${w}`)
-  const tags = commits.filter((c) => c.tag != null).length
-  const opts = { reveal, mode: cfg.mode, context, commits: commits.length - tags, tags, version: VERSION, warnings }
+  const opts = { reveal, mode: cfg.mode, context, commits, tags, version: VERSION, warnings }
   out(json ? toJSON(findings, opts) : formatText(findings, opts))
   return findings.length && cfg.mode === 'block' ? 1 : 0
 }
@@ -86,14 +89,29 @@ function prePush(args, cwd) {
   return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
 }
 
+// The whole history, streamed: each commit goes through the rules as git writes it and
+// only its findings are kept, so a repository of any size is read in the memory of its
+// largest commit. The annotated tags follow, read as before. Same findings, same order,
+// same output as reading it all first.
+async function scanHistory(cwd, cfg, warnings, opts) {
+  const scan = scanner(cfg)
+  const findings = []
+  let ci = 0
+  for await (const c of streamCommits(cwd, ['--all'])) for (const f of scan(c, ci++)) findings.push(f)
+  const commits = ci
+  const tags = allTags(cwd)
+  for (const t of tags) for (const f of scan(t, ci++)) findings.push(f)
+  return reportFindings(sortFindings(findings), { commits, tags: tags.length }, cfg, warnings, opts)
+}
+
 function scan(args, cwd) {
   const flags = parseFlags(args, ['--range', '--staged', '--history', '--json', '--show'])
   if ([flags.range, flags.staged, flags.history].filter(Boolean).length > 1) throw new UsageError('pick one of --range, --staged, --history')
   const root = needRepo(cwd)
   const { effective, warnings } = loadConfig({ repoRoot: root })
+  if (flags.history) return scanHistory(cwd, effective, warnings, { json: flags.json, show: flags.show, context: 'scan' })
   let commits
   if (flags.staged) commits = [stagedCommit(cwd)]
-  else if (flags.history) commits = [...logCommits(cwd, ['--all']), ...allTags(cwd)]
   else if (flags.range) commits = logCommits(cwd, [flags.range])
   else {
     const revs = defaultRevs(cwd)
@@ -206,7 +224,7 @@ function main(argv) {
 
 let code
 try {
-  code = main(process.argv.slice(2))
+  code = await main(process.argv.slice(2))
 } catch (e) {
   if (e instanceof UsageError || e instanceof ConfigError || e instanceof GitError) {
     err(`disclosegate: ${e.message}`)

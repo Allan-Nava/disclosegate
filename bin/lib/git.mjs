@@ -2,7 +2,8 @@
 // `git log -p` in one pass. Every call pins the settings that would change git's
 // output — a pager, a signature check, an external diff, quoted paths, a dropped
 // root diff — so a user's global config cannot make a line invisible to the rules.
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
+import { StringDecoder } from 'node:string_decoder'
 
 export class GitError extends Error {}
 
@@ -143,23 +144,85 @@ export function parsePatch(text) {
   return { added, files }
 }
 
-export function parseLog(out) {
-  const commits = []
-  for (const chunk of String(out).split('\x01').slice(1)) {
-    const end = chunk.indexOf('\x03')
-    const [sha, an, ae, cn, ce, ...body] = chunk.slice(0, end).split('\x02')
-    const { added, files } = parsePatch(chunk.slice(end + 1))
-    commits.push({ sha, author: { name: an, email: ae }, committer: { name: cn, email: ce }, message: body.join('\x02'), added, files })
-  }
-  return commits
+// One commit of the log: the text after a %x01, up to the next one.
+function parseEntry(chunk) {
+  const end = chunk.indexOf('\x03')
+  const [sha, an, ae, cn, ce, ...body] = chunk.slice(0, end).split('\x02')
+  const { added, files } = parsePatch(chunk.slice(end + 1))
+  return { sha, author: { name: an, email: ae }, committer: { name: cn, email: ce }, message: body.join('\x02'), added, files }
 }
 
+export function parseLog(out) {
+  return String(out).split('\x01').slice(1).map(parseEntry)
+}
+
+// The arguments of the one `git log` pass, without the pinned settings `git()` adds.
 // revs are passed as separate arguments and never start with `-` unless we wrote
 // them: a range from the command line is checked before it gets here.
+export const logArgs = (revs) => ['log', '-p', ...MERGES, ...DIFF, `--format=${FORMAT}`, ...revs, '--']
+
 export function logCommits(cwd, revs) {
-  const r = git(['log', '-p', ...MERGES, ...DIFF, `--format=${FORMAT}`, ...revs, '--'], { cwd })
+  const r = git(logArgs(revs), { cwd })
   if (!r.ok) throw new GitError(`git log failed: ${r.err.trim().split('\n')[0]}`)
   return parseLog(r.out)
+}
+
+// The log as it arrives: bytes in, whole commits out. A commit is complete when the
+// next one's %x01 arrives, so only the commit being read is held — `pending` — never
+// the history. The decoder carries a character split across two chunks, so the text
+// is what `parseLog` would have seen in one string.
+export function splitLog() {
+  const decoder = new StringDecoder('utf8')
+  let pending = ''
+  let started = false
+  const take = (text) => {
+    const parts = (pending + text).split('\x01')
+    pending = parts.pop()
+    if (!started) {
+      if (!parts.length) return []
+      parts.shift()
+      started = true
+    }
+    return parts.map(parseEntry)
+  }
+  return {
+    push: (chunk) => take(decoder.write(chunk)),
+    end() {
+      const out = take(decoder.end())
+      if (started) out.push(parseEntry(pending))
+      pending = ''
+      return out
+    },
+    get pending() {
+      return pending
+    },
+  }
+}
+
+// `logCommits`, streamed: the commits one at a time as git writes them, so a history
+// of any size is read in the memory of its largest commit. git's own error is the
+// GitError `logCommits` throws, once the log has ended.
+export async function* streamCommits(cwd, revs) {
+  const child = spawn('git', [...PINNED, ...logArgs(revs)], { cwd, stdio: ['ignore', 'pipe', 'pipe'] })
+  let err = ''
+  child.stderr.setEncoding('utf8')
+  child.stderr.on('data', (d) => {
+    if (err.length < 65536) err += d
+  })
+  const exited = new Promise((done) => {
+    child.on('error', (e) => done({ error: e }))
+    child.on('close', (status) => done({ status }))
+  })
+  const split = splitLog()
+  try {
+    for await (const chunk of child.stdout) yield* split.push(chunk)
+    const { error, status } = await exited
+    if (error) throw new GitError(`git could not be run: ${error.code ?? error.message}`)
+    if (status !== 0) throw new GitError(`git log failed: ${err.trim().split('\n')[0]}`)
+    yield* split.end()
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill()
+  }
 }
 
 // The git hook protocol: one `<local-ref> <local-sha> <remote-ref> <remote-sha>` per

@@ -143,16 +143,30 @@ export const emailPublic = (email, publicEmails) => publicEmails.some((p) => wil
 // reads them, and so does a term that also comes from the user file.
 export const REPO_FILE = '.disclosegate.json'
 
+// Findings worst first; within a rule, in the order the commits were read.
+export const sortFindings = (findings) => findings.sort((a, b) => a.rank - b.rank || a.ci - b.ci)
+
 // cfg: { publicEmails, blockedDomains, terms: [{source, re, fromRepo?}], blockedNames, allowPaths }
 export function scanCommits(commits, cfg) {
+  const scan = scanner(cfg)
   const out = []
+  commits.forEach((c, ci) => {
+    for (const f of scan(c, ci)) out.push(f)
+  })
+  return sortFindings(out)
+}
+
+// The rules for one commit at a time — `ci` is its place in the reading — so a caller
+// that streams the history holds the findings, never the commits. Unsorted.
+export function scanner(cfg) {
   const terms = cfg.terms ?? []
   const publicEmails = cfg.publicEmails ?? []
   const blockedDomains = (cfg.blockedDomains ?? []).map((d) => d.toLowerCase())
   const blockedNames = (cfg.blockedNames ?? []).map((n) => n.trim().toLowerCase())
   const allowPaths = cfg.allowPaths ?? []
 
-  commits.forEach((c, ci) => {
+  return (c, ci) => {
+    const out = []
     const isTag = c.tag != null
     const add = (f) => {
       const key = f.rule === 'email' ? `email:${f.kind === 'blocked domain' ? 'blocked' : 'unlisted'}` : f.rule
@@ -214,6 +228,6 @@ export function scanCommits(commits, cfg) {
       domainsIn(where, a.text)
       if (!matchesGlob(a.file, allowPaths)) pathsIn(where, a.text)
     }
-  })
-  return out.sort((a, b) => a.rank - b.rank || a.ci - b.ci)
+    return out
+  }
 }

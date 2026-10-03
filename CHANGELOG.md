@@ -6,6 +6,12 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 ## [Unreleased]
 
 ### Changed
+- `scan --history` streams the log: each commit goes through the rules as git writes it
+  and only its findings are kept, so the history is never in memory whole — and no longer
+  limited by the 1 GiB buffer the collected read had. The output, the masking and the
+  exit codes are those of the collected reading, held to it by a test on a fixture
+  repository; on a synthetic 4,000-commit history the peak resident memory fell from
+  1.1 GB to 209 MB (DG-22).
 - A pre-push hook that `install --force` moved aside keeps running: the hook script runs
   it after disclosegate passes the push, with the same arguments and the same stdin, and
   its exit code counts — either can refuse the push; one disclosegate refuses never

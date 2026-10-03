@@ -160,11 +160,24 @@ and rates are published, the matches are not.
   its exit code the hook's; real pushes show it running after a clean push (from a
   subdirectory, and under `core.hooksPath`), refusing one, and never reached by a refused
   one; `doctor` reports the chain. <!-- dg: prio=low size=S labels=hook,enhancement ver=main -->
-- [ ] **DG-22 — Stream `--history`**: the log is read into memory whole; on a large
-  repository read it as a stream. <!-- dg: prio=low size=S labels=enhancement -->
+- [x] **DG-22 — Stream `--history`**: the log is read into memory whole; on a large
+  repository read it as a stream. Done 2026-10-03: `streamCommits` spawns the same pinned
+  `git log` and `splitLog` hands over each commit when the next begins; `scan --history`
+  runs the rules per commit and keeps only findings. A test holds its text and JSON
+  output, stderr and exit code, block and audit, to the collected reading on a fixture
+  repository, and the splitter to `parseLog` split at every byte; 0.0.3 and the stream
+  printed the same on two real histories and a synthetic 4,000-commit one (peak RSS
+  1.1 GB → 209 MB). <!-- dg: prio=low size=S labels=enhancement ver=main -->
 - [ ] **DG-23 — The social card**: render `assets/social-preview.png` from
   `assets/social-preview.html` with headless Chrome and name it in the page's
   `og:image`. <!-- dg: prio=low size=S labels=docs -->
 - [ ] **DG-24 — A `pre-commit` framework definition**: `.pre-commit-hooks.yaml` with
   `stages: [pre-push]`, for repositories that manage hooks that way.
   <!-- dg: prio=low size=S labels=hook,enhancement -->
+- [ ] **DG-29 — A control byte in a line splits the log**: `parseLog` and `splitLog` cut
+  the log at every `\x01`, and git prints a file holding that byte (but no NUL) as text,
+  so an added line containing it splits one commit in two — the lines after it in that
+  commit go unread and the commit is counted twice. Found during DG-22: a home path after
+  such a line passed `scan --history` in 0.0.3 and on `main`, and the hook reads through
+  the same parser. Separate commits by a byte a text diff cannot carry (NUL, with `-z`)
+  and add the case as a real push. <!-- dg: prio=med size=S labels=rules,hook -->

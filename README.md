@@ -174,6 +174,11 @@ disclosegate init                    # the template user file; refuses to overwr
 disclosegate doctor                  # config found, rules active, hook installed, remotes enforced
 ```
 
+`scan --history` reads the log as a stream: each commit goes through the rules as git
+writes it and only its findings are kept, so a history of any size is read in about the
+memory of its largest commit — on a synthetic 4,000-commit history with 250 MB of
+patches, a peak of 209 MB against 1.1 GB when it was read whole, with the same output.
+
 ## What it never does
 
 - It **never sends** anything anywhere. No network request, no telemetry, no update
