@@ -10,7 +10,7 @@
 //
 // Both files are JSON with `//` and `/* */` comments. A missing user file is not an
 // error: the path rule needs no list and still runs.
-import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
+import { lstatSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, relative, resolve, sep, isAbsolute } from 'node:path'
 import { compileTerm, REPO_FILE, wildcard } from './rules.mjs'
@@ -59,13 +59,19 @@ export function stripComments(text) {
   return out
 }
 
-function readJsonc(file, shown) {
-  let text
+// A config file's text, or null when there is none: one read, no existence check before
+// it, so the file found is the file read (DG-35).
+function readText(file, shown) {
+  if (!file) return null
   try {
-    text = readFileSync(file, 'utf8')
+    return readFileSync(file, 'utf8')
   } catch (e) {
+    if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return null
     throw new ConfigError(`${shown}: cannot be read (${e.code})`)
   }
+}
+
+function parseJsonc(text, shown) {
   let data
   try {
     data = JSON.parse(stripComments(text))
@@ -137,19 +143,22 @@ const uniq = (xs) => [...new Set(xs)]
 
 export function loadConfig({ env = process.env, repoRoot = null } = {}) {
   const userPath = userConfigPath(env)
-  const user = { path: userPath, shown: tildify(userPath, env), found: existsSync(userPath), data: {} }
+  const shown = tildify(userPath, env)
+  const userText = readText(userPath, shown)
+  const user = { path: userPath, shown, found: userText !== null, data: {} }
   if (user.found) {
     if (repoRoot && inside(userPath, repoRoot)) throw new ConfigError(`${user.shown}: the user config holds the private lists and must never live in a repository — move it out of this one`)
-    user.data = readJsonc(userPath, user.shown)
+    user.data = parseJsonc(userText, user.shown)
     const unknown = Object.keys(user.data).filter((k) => !USER_KEYS.includes(k))
     if (unknown.length) throw new ConfigError(`${user.shown}: unknown key${unknown.length > 1 ? 's' : ''} ${unknown.join(', ')} (known: ${USER_KEYS.join(', ')})`)
     validate(user.data, user.shown, USER_KEYS)
   }
 
   const repoPath = repoRoot ? join(repoRoot, REPO_FILE) : null
-  const repo = { path: repoPath, shown: REPO_FILE, found: !!repoPath && existsSync(repoPath), data: {}, ignored: [] }
+  const repoText = readText(repoPath, REPO_FILE)
+  const repo = { path: repoPath, shown: REPO_FILE, found: repoText !== null, data: {}, ignored: [] }
   if (repo.found) {
-    const data = readJsonc(repoPath, repo.shown)
+    const data = parseJsonc(repoText, repo.shown)
     repo.ignored = Object.keys(data).filter((k) => !REPO_KEYS.includes(k))
     validate(data, repo.shown, REPO_KEYS)
     for (const k of REPO_KEYS) if (k in data) repo.data[k] = data[k]

@@ -1,7 +1,7 @@
 // The commands run by hand: scan, install and uninstall, init, doctor, and the exit
 // codes that tell a finding (1) from a usage or configuration error (2).
 import assert from 'node:assert/strict'
-import { closeSync, existsSync, fstatSync, openSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, lstatSync, openSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { stripComments } from '../bin/lib/config.mjs'
@@ -121,6 +121,50 @@ test('install refuses to clobber a hook it did not write; --force moves it and c
   assert.ok(!existsSync(`${hook}.before-disclosegate`))
 })
 
+test('DG-35: install --force never replaces a hook already moved aside; both stay as they were', () => {
+  const sb = sandbox()
+  const hook = join(sb.work, '.git', 'hooks', 'pre-push')
+  writeFileSync(hook, '#!/bin/sh\necho second\n', { mode: 0o755 })
+  writeFileSync(`${hook}.before-disclosegate`, '#!/bin/sh\necho first\n', { mode: 0o755 })
+  const r = sb.run(['install', '--force'])
+  assert.equal(r.code, 2, r.out)
+  assert.match(r.stderr, /already exists — move one of the two hooks yourself first/)
+  assert.equal(readFileSync(hook, 'utf8'), '#!/bin/sh\necho second\n')
+  assert.equal(readFileSync(`${hook}.before-disclosegate`, 'utf8'), '#!/bin/sh\necho first\n')
+})
+
+test('DG-35: a hook that is a symbolic link is moved aside as one, and put back as one', () => {
+  const sb = sandbox()
+  const hook = join(sb.work, '.git', 'hooks', 'pre-push')
+  const target = join(sb.base, 'shared-hook')
+  writeFileSync(target, '#!/bin/sh\necho shared\n', { mode: 0o755 })
+  symlinkSync(target, hook)
+  const f = sb.run(['install', '--force'])
+  assert.equal(f.code, 0, f.out)
+  const moved = `${hook}.before-disclosegate`
+  assert.ok(lstatSync(moved).isSymbolicLink(), 'a link, not a hard link to its target')
+  assert.equal(readlinkSync(moved), target)
+  assert.ok(!lstatSync(hook).isSymbolicLink(), 'the installed hook is a file of its own')
+  assert.equal(readFileSync(target, 'utf8'), '#!/bin/sh\necho shared\n', 'the target is untouched')
+  const back = sb.run(['uninstall'])
+  assert.equal(back.code, 0, back.out)
+  assert.match(back.stdout, /restored/)
+  assert.equal(readlinkSync(hook), target)
+  assert.ok(!existsSync(moved))
+})
+
+test('DG-35: install refuses a pre-push that is a link to a missing file, and writes nothing through it', () => {
+  const sb = sandbox()
+  const hook = join(sb.work, '.git', 'hooks', 'pre-push')
+  const missing = join(sb.base, 'missing-hook')
+  symlinkSync(missing, hook)
+  const r = sb.run(['install'])
+  assert.equal(r.code, 2, r.out)
+  assert.match(r.stderr, /could not be read as a hook/)
+  assert.equal(contents(missing), null, 'nothing was written through the link')
+  assert.equal(readlinkSync(hook), missing)
+})
+
 test('the installed hook refuses the push when disclosegate has gone', () => {
   const sb = sandbox()
   assert.equal(sb.run(['install']).code, 0)
@@ -194,6 +238,15 @@ test('doctor: config, rules, hook and remotes', () => {
   assert.match(d.stdout, /hook\s+.*pre-push — installed/)
   assert.match(d.stdout, /origin — enforced \(remotes\.enforce\)/)
   assert.doesNotMatch(d.stdout, /alice@|nimbus/, 'doctor prints counts, not values')
+})
+
+test('DG-35: a user config path under a file is no user config, as a missing one is', () => {
+  const sb = sandbox()
+  const file = join(sb.home, 'not-a-dir')
+  writeFileSync(file, 'x\n')
+  const d = sb.run(['doctor'], { extraEnv: { DISCLOSEGATE_CONFIG: join(file, '.disclosegate.json') } })
+  assert.equal(d.code, 1, d.out)
+  assert.match(d.stdout, /user config\s+.*missing/)
 })
 
 test('doctor without a user config says what is missing', () => {

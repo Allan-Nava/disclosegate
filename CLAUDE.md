@@ -87,7 +87,11 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    alone without `--force`, moved aside with it, restored by `uninstall`. Moved aside, it
    is chained, not dropped: the hook script runs it after disclosegate passes the push,
    with the same arguments and stdin (held in a shell variable), and its exit code is the
-   hook's; a push disclosegate refuses never reaches it.
+   hook's; a push disclosegate refuses never reaches it. Every step is one operation that
+   fails where it would replace something — the move is a hard link (a copy of the link
+   for a symbolic one, since macOS `link()` follows it) then an unlink, the write is `'wx'`
+   unless the hook read was ours — and the config files are read once, `ENOENT` meaning
+   absent: no `existsSync` before an act on the same path (DG-34, DG-35).
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
    `git log -p` output — pager, signatures, external diff, textconv, binary detection
    (`--text`), quoted paths, root diffs, `diff.relative`, `diff.submodule` — and parses

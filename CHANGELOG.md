@@ -13,6 +13,13 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   and a forge showed it; `blockedDomains` still caught the address as message text. One CR
   is dropped before the trailer shape is matched; a CR inside the line still ends it. This
   changes findings: a push that passed may now be refused (DG-33).
+- `install`, `uninstall` and the config loader no longer check that a path exists and
+  then act on it. The hook's state and both config files come from one read, `ENOENT`
+  meaning absent; a hook is moved aside, and put back, by an exclusive link and an unlink
+  instead of a rename that would replace whatever had appeared at the new name; the hook
+  is written with `'wx'` unless the file read was disclosegate's own. One behaviour
+  changes: a `pre-push` that is a link to a missing file is refused instead of written
+  through. A symbolic-link hook still moves aside as a link (DG-35).
 
 ## [0.0.4] — 2026-10-03
 

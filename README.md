@@ -58,7 +58,10 @@ Node 18 or later. No runtime dependency.
 is set, so a global `core.hooksPath` covers every repository at once. The file carries a
 marker comment; `install` never overwrites a hook without it unless given `--force`, which
 moves the other hook to `pre-push.before-disclosegate`, and `uninstall` removes only its
-own hook and puts the moved one back.
+own hook and puts the moved one back. Neither replaces a file it finds in its way: `--force`
+stops when a hook was already moved aside, and `install` refuses a `pre-push` it cannot
+read — a link to a missing file, which a plain write would create through. A hook that is
+a symbolic link is moved aside as one.
 
 A hook moved aside keeps running: disclosegate goes first, and when it passes the push the
 other hook runs with the same arguments and the same stdin, byte for byte, and its exit
