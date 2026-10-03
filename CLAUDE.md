@@ -5,13 +5,15 @@ Guidance for Claude Code when working in this repository.
 ## What this repo is
 
 `disclosegate` is a **git pre-push hook** and the CLI around it: before a push leaves,
-it reads the commits' metadata and messages and the lines each commit adds, and refuses
-the push when they carry internal detail — a work address as author, committer or
-trailer, a private host, service, repository or client name, a home-directory path, a
-`file:` URL. It is not a secret scanner; gitleaks is, and the README says so. It is
-modelled on its sibling projects: dependency-free, releases by tag over OIDC,
-BACKLOG.md as the single source of truth, the same prose conventions. It is not a
-Claude Code or Codex plugin and has no plugin manifests.
+it reads the commits' metadata and messages, the lines each commit adds — a merge's
+own included — and the tagger and message of an annotated tag, and refuses the push when
+they carry internal detail — a work address as author, committer, tagger or trailer, or
+at a blocked domain anywhere in a message or a line; a private host, service, repository
+or client name; a home-directory path, a `file:` URL. It is not a secret scanner;
+gitleaks is, and the README says so. It is modelled on its sibling projects:
+dependency-free, releases by tag over OIDC, BACKLOG.md as the single source of truth,
+the same prose conventions. It is not a Claude Code or Codex plugin and has no plugin
+manifests.
 
 `thoughts/DG-1-disclosegate/00-brief.md` is the task definition. No QRSPI phase has been
 run on it.
@@ -22,9 +24,11 @@ run on it.
 bin/disclosegate.mjs   the CLI: pre-push · scan · install · uninstall · init · doctor · check;
                        its header comment is the usage text and the site's command list
 bin/lib/               rules (pure: the four rules, masking, ordering — no fs, no git), git
-                       (one `git log -p -U0` pass, settings pinned; the pre-push protocol;
-                       the patch parser), config (user file → repository file, the trust
-                       order, remotes, the init template), report (text and JSON, masked),
+                       (one `git log -p --cc -U0` pass, settings pinned; annotated tags
+                       through one `cat-file --batch`; the pre-push protocol; the patch
+                       parser, a merge's combined hunks included),
+                       config (user file → repository file, the trust order, remotes,
+                       the init template), report (text and JSON, masked),
                        hook (hooks dir, the hook script, the marker, install/uninstall),
                        doctor, check (this repository's invariants), changelog
 test/                  node:test suites — rules.test.mjs (units; the only file that spells
@@ -69,7 +73,8 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
    `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
    diffs — and parses hunks by their counts, so an added line that begins with `++ ` is
-   content.
+   content. A merge is read through `--cc`, its combined hunks by the same counts, and
+   only a line new to every parent is its own.
 
 ## Verifying a change
 

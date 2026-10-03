@@ -211,3 +211,16 @@ test('blockedNames: an author name is a finding', () => {
   assert.equal(r.code, 1)
   assert.match(r.stdout, /name\s+[0-9a-f]{7}\s+author\s+Bo… \(11 chars\)\s+blocked name/)
 })
+
+test('scan --history reads annotated tags too, and counts them apart', () => {
+  const sb = sandbox()
+  sb.userConfig({ publicEmails: [ALICE.email] })
+  sb.commit()
+  sb.git(['tag', '-a', 'v1', '-m', 'Release 1'], { extraEnv: { GIT_COMMITTER_NAME: BOB.name, GIT_COMMITTER_EMAIL: BOB.email } })
+  const r = sb.run(['scan', '--history', '--json'])
+  assert.equal(r.code, 1, r.out)
+  const j = JSON.parse(r.stdout)
+  assert.equal(j.commits, 1)
+  assert.equal(j.tags, 1)
+  assert.deepEqual(j.findings.map((f) => [f.rule, f.where, f.match]), [['email', 'tagger', 'bo… (20 chars)']])
+})
