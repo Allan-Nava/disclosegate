@@ -88,7 +88,14 @@ function dropEmptyHead(html) {
 
 // Bare `path/` and `file.md` references in the README become links to the repo.
 function linkifyPaths(html) {
-  return html.replace(/<code>([\w./-]+\.(?:md|json|mjs)|(?:bin|test|scripts|thoughts)\/[\w./-]*)<\/code>/g, (full, path) => {
+  // A relative README link (`[BACKLOG.md](BACKLOG.md)`) resolves on GitHub and 404s on
+  // Pages: point it at the file on GitHub, when the file exists in the repository.
+  html = html.replace(/href="(?![a-z][a-z0-9+.-]*:|#|\/)([^"]+)"/gi, (full, href) => {
+    const clean = href.split('#')[0].replace(/\/$/, '')
+    return clean && existsSync(join(ROOT, clean)) ? `href="${BLOB}/${href}"` : full
+  })
+  // A <code> already inside a link stays as it is: wrapping it again nests one link in another.
+  return html.replace(/(?<!<a\b[^>]*>)<code>([\w./-]+\.(?:md|json|mjs)|(?:bin|test|scripts|thoughts)\/[\w./-]*)<\/code>/g, (full, path) => {
     const clean = path.replace(/\/$/, '')
     if (!existsSync(join(ROOT, clean))) return full
     return `<a class="pathlink" href="${BLOB}/${clean}"><code>${path}</code></a>`
@@ -331,13 +338,13 @@ ${nav.map((s) => `      <a href="#${slug(s.heading)}">${esc(s.heading)}</a>`).jo
     ${mark(66, 'hero-mark')}
     <span class="eyebrow">git pre-push hook · v${esc(pkg.version)}</span>
     <h1>${esc(title)}</h1>
-    <div class="lede">${marked.parseInline(lede.replace(/\n/g, ' '))}</div>
+    <div class="lede">${linkifyPaths(marked.parseInline(lede.replace(/\n/g, ' ')))}</div>
     <div class="cta">
       <a class="primary" href="#install">Install</a>
       <a href="${REPO}">Source</a>
       <a href="https://www.npmjs.com/package/${pkg.name}">npm</a>
     </div>
-    <div class="note">${marked.parse(after)}</div>
+    <div class="note">${linkifyPaths(marked.parse(after))}</div>
   </div>
 
 ${rendered.join('\n\n')}
