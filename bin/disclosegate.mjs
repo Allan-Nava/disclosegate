@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // disclosegate — a pre-push guard against publishing internal detail.
 //
-//   disclosegate pre-push <remote> <url>     the git hook: ref lines on stdin, as git sends them
+//   disclosegate pre-push <remote> <url> | --pre-commit   the git hook: ref lines on stdin — or pre-commit's PRE_COMMIT_* variables
 //   disclosegate scan [--range A..B | --staged | --history] [--json] [--show]  the same rules, by hand
 //   disclosegate install [--force]           write the pre-push hook, never over another tool's
 //   disclosegate uninstall                   remove the hook, only if disclosegate wrote it
@@ -73,7 +73,47 @@ function reportFindings(findings, { commits, tags }, cfg, warnings, { json, show
   return findings.length && cfg.mode === 'block' ? 1 : 0
 }
 
+// Under the pre-commit framework, whose pre-push stage has read git's stdin itself and
+// passes one ref — the first that sends anything — as PRE_COMMIT_* variables:
+// FROM_REF..TO_REF, or only LOCAL_BRANCH when the branch starts at a root commit, where
+// everything no ref of the remote has is read, as the git hook reads a new branch.
+// Anything missing is a usage error, so the push is refused rather than unchecked.
+function preCommitPush(args, cwd) {
+  const rest = args.filter((a) => a !== '--json')
+  if (rest.length) throw new UsageError('pre-push --pre-commit takes no file names — the hook needs pass_filenames: false, as .pre-commit-hooks.yaml sets it')
+  const env = process.env
+  const name = env.PRE_COMMIT_REMOTE_NAME
+  const url = env.PRE_COMMIT_REMOTE_URL
+  if (!name || !url) throw new UsageError('pre-push --pre-commit reads PRE_COMMIT_REMOTE_NAME and PRE_COMMIT_REMOTE_URL, which pre-commit sets in its pre-push stage — run it from there, or install the git hook with `disclosegate install`')
+  const from = env.PRE_COMMIT_FROM_REF
+  const to = env.PRE_COMMIT_TO_REF
+  const local = env.PRE_COMMIT_LOCAL_BRANCH
+  const rev = (v) => {
+    if (v.startsWith('-')) throw new UsageError('a PRE_COMMIT_* revision cannot begin with "-"')
+    return v
+  }
+  let revs
+  let tip
+  if (from && to) {
+    revs = [`${rev(from)}..${rev(to)}`]
+    tip = to
+  } else if (local) {
+    revs = [rev(local), '--not', `--remotes=${name}`]
+    tip = local
+  } else throw new UsageError('pre-push --pre-commit needs PRE_COMMIT_FROM_REF and PRE_COMMIT_TO_REF, or PRE_COMMIT_LOCAL_BRANCH — none is set')
+  const root = needRepo(cwd)
+  const { effective, warnings } = loadConfig({ repoRoot: root })
+  const v = remoteVerdict(url, effective.remotes)
+  if (!v.enforce) {
+    err(`disclosegate: remote ${name} is not enforced (${v.reason}) — not checked`)
+    return 0
+  }
+  const commits = [...logCommits(cwd, revs), ...tagsAt(cwd, [tip])]
+  return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
+}
+
 function prePush(args, cwd) {
+  if (args.includes('--pre-commit')) return preCommitPush(args.filter((a) => a !== '--pre-commit'), cwd)
   const [remoteName, remoteUrl, ...rest] = args.filter((a) => a !== '--json')
   if (!remoteName || !remoteUrl || rest.length) throw new UsageError('pre-push <remote-name> <remote-url> — git passes both; the ref lines come on stdin')
   if (process.stdin.isTTY) throw new UsageError('pre-push reads the ref lines git writes on stdin — by hand, run `disclosegate scan`')

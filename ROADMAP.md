@@ -4,7 +4,7 @@
 
 > This page is **generated** from [BACKLOG.md](BACKLOG.md), the single source of truth for planned work. Regenerate it with `npm run roadmap` after editing the backlog — CI fails when the two disagree.
 
-**29 items · 23 shipped · 6 open · 3 milestones.**
+**29 items · 24 shipped · 5 open · 3 milestones.**
 
 ## At a glance
 
@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | **v0.0.1 — The guard, test-first** | now | `##########` 100% | 0 | 13 |
 | **v0.1.0 — A week in audit mode** | next | `######....` 63% | 3 | 5 |
-| **v0.2.0 — What the first version does not read** | later | `######....` 63% | 3 | 5 |
+| **v0.2.0 — What the first version does not read** | later | `########..` 75% | 2 | 6 |
 
 ## v0.0.1 — The guard, test-first
 
@@ -49,5 +49,5 @@
 - [x] **DG-21** — Chain a moved-aside hook · low · S · hook, enhancement · `main`
 - [x] **DG-22** — Stream `--history` · low · S · enhancement · `main`
 - [ ] **DG-23** — The social card · low · S · docs
-- [ ] **DG-24** — A `pre-commit` framework definition · low · S · hook, enhancement
+- [x] **DG-24** — A `pre-commit` framework definition · low · S · hook, enhancement · `main`
 - [ ] **DG-29** — A control byte in a line splits the log · med · S · rules, hook

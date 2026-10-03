@@ -171,9 +171,14 @@ and rates are published, the matches are not.
 - [ ] **DG-23 — The social card**: render `assets/social-preview.png` from
   `assets/social-preview.html` with headless Chrome and name it in the page's
   `og:image`. <!-- dg: prio=low size=S labels=docs -->
-- [ ] **DG-24 — A `pre-commit` framework definition**: `.pre-commit-hooks.yaml` with
-  `stages: [pre-push]`, for repositories that manage hooks that way.
-  <!-- dg: prio=low size=S labels=hook,enhancement -->
+- [x] **DG-24 — A `pre-commit` framework definition**: `.pre-commit-hooks.yaml` with
+  `stages: [pre-push]`, for repositories that manage hooks that way. Done 2026-10-03: the
+  definition calls `disclosegate pre-push --pre-commit`, which reads `PRE_COMMIT_REMOTE_*`
+  and `FROM_REF..TO_REF` (or `LOCAL_BRANCH` from a root) — pre-commit consumes git's stdin
+  and passes the first ref only, per its `hook_impl.py` source; tests cover the variables,
+  a tag at `TO_REF`, enforcement, audit mode, the fail-closed cases and a real push through
+  a caller modelled on pre-commit's. pre-commit itself was not installed, so it never ran.
+  <!-- dg: prio=low size=S labels=hook,enhancement ver=main -->
 - [ ] **DG-29 — A control byte in a line splits the log**: `parseLog` and `splitLog` cut
   the log at every `\x01`, and git prints a file holding that byte (but no NUL) as text,
   so an added line containing it splits one commit in two — the lines after it in that

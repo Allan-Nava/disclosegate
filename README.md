@@ -92,6 +92,38 @@ Nothing has left this machine. Rewrite the commits, then push again:
 
 `git push --no-verify` skips the hook, as it skips every pre-push hook — knowingly, once.
 
+## With the pre-commit framework
+
+A repository whose hooks are managed by [pre-commit](https://pre-commit.com) can run
+disclosegate from its config instead — `.pre-commit-hooks.yaml` defines it as a
+`pre-push` stage hook (pre-commit 3.2 or later):
+
+```yaml
+repos:
+  - repo: https://github.com/Allan-Nava/disclosegate
+    rev: disclosegate--vX.Y.Z   # a release tag — the first after 0.0.3 carries the definition
+    hooks:
+      - id: disclosegate
+```
+
+```bash
+pre-commit install --hook-type pre-push
+```
+
+It reads the same user file and applies the same rules, modes and remote enforcement.
+pre-commit reads git's stdin itself, so its entry, `disclosegate pre-push --pre-commit`,
+reads what pre-commit passes instead: `PRE_COMMIT_REMOTE_NAME` and `PRE_COMMIT_REMOTE_URL`,
+and either `PRE_COMMIT_FROM_REF..PRE_COMMIT_TO_REF` or, for a branch that starts at a root
+commit, everything `PRE_COMMIT_LOCAL_BRANCH` has that no ref of the remote has. A missing
+variable or a file name on the command line is a usage error, and refuses the push.
+
+That interface is narrower than git's, and the difference is pre-commit's: it hands its
+hooks **one ref — the first that sends anything**. A push of several refs at once is
+checked on that one only, and a tag pushed onto commits the remote already has runs no
+hook at all, so its tagger and message go unread. The git hook reads every ref. For the
+whole push and pre-commit's other hooks, install both: `disclosegate install --force`
+moves pre-commit's `pre-push` hook aside and chains it after disclosegate.
+
 ## Configuration
 
 Two files, in a trust order.
@@ -200,7 +232,8 @@ patches, a peak of 209 MB against 1.1 GB when it was read whole, with the same o
 - [trufflehog](https://github.com/trufflesecurity/trufflehog) — secrets across many
   sources, with live verification of what it finds.
 - [pre-commit](https://pre-commit.com) — the framework many repositories use to manage
-  hooks; disclosegate installs its own and does not require it.
+  hooks; disclosegate installs its own and does not require it, and ships a definition for
+  it (see [With the pre-commit framework](#with-the-pre-commit-framework)).
 
 ## License
 
