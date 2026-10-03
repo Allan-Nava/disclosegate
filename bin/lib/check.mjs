@@ -6,7 +6,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { breakingOutOfPlace, changelogSection } from './changelog.mjs'
 import { git } from './git.mjs'
-import { mask, pathMatches } from './rules.mjs'
+import { addressesIn, CLASS, mask, pathMatches } from './rules.mjs'
 import { ConfigError, loadConfig, REPO_KEYS } from './config.mjs'
 
 // The one file that spells the path shapes out, because it defines and tests them.
@@ -26,8 +26,28 @@ export function missingDiffFlags(source) {
   return DIFF_FLAGS.filter((f) => !diff.includes(`'${f}'`))
 }
 
-const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g
+// `[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}`, found from each `@`
+// outwards as the rules find theirs (DG-31): the domain runs to the last label after a dot
+// that starts with two letters, and ends after those letters.
+function checkDomain(s, i) {
+  const { host, alpha } = CLASS
+  let e = i
+  while (host[s.charCodeAt(e)] === 1) e++
+  if (e === i) return -1
+  let best = -1
+  while (s.charCodeAt(e) === 46) {
+    let f = e + 1
+    while (host[s.charCodeAt(f)] === 1) f++
+    if (f === e + 1) break
+    let a = e + 1
+    while (alpha[s.charCodeAt(a)] === 1) a++
+    if (a - (e + 1) >= 2) best = a
+    e = f
+  }
+  return best
+}
 const PLACEHOLDER_DOMAIN = /(?:^|\.)(?:example\.(?:com|org|net|internal)|[^.]+\.(?:example|test|invalid|localhost))$|^(?:example|test|invalid|localhost)$/i
+export const checkEmails = (text) => addressesIn(text, CLASS.local, checkDomain)
 export const placeholderEmail = (e) => PLACEHOLDER_DOMAIN.test(e.split('@').pop())
 
 function trackedFiles(root) {
@@ -65,7 +85,7 @@ export function scanTree(root, files, { terms = [] } = {}) {
       .forEach((text, i) => {
         const at = `${file}:${i + 1}`
         for (const h of pathMatches(text)) failures.push(`${at}: ${h.kind} (${mask(h.match)})`)
-        for (const m of text.matchAll(EMAIL)) if (!placeholderEmail(m[0])) failures.push(`${at}: an email address that is not a placeholder (${mask(m[0])}) — use example.com, *.example or example.internal`)
+        for (const e of checkEmails(text)) if (!placeholderEmail(e)) failures.push(`${at}: an email address that is not a placeholder (${mask(e)}) — use example.com, *.example or example.internal`)
         for (const t of terms) {
           t.re.lastIndex = 0
           const m = t.re.exec(text)

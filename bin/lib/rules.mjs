@@ -39,9 +39,38 @@ export function mask(s) {
 }
 
 // `*` is a wildcard; everything else is literal. `anchored` globs match the whole
-// string, case-insensitively.
+// string, case-insensitively. What it returns has `test`, as the regex
+// `^part.*part.*part$` (`*` never crossing a line break) would — but that regex is
+// quadratic in the string with two stars and cubic with three, and the string can be
+// an address of any length from a message line, so a pattern with two stars or more is
+// matched part by part: the first at the start, the last at the end, each between at
+// its leftmost place (DG-31).
+const BREAK = /[\n\r\u2028\u2029]/
 export function wildcard(pattern) {
-  return new RegExp(`^${String(pattern).split('*').map(esc).join('.*')}$`, 'i')
+  const parts = String(pattern).split('*')
+  const re = new RegExp(`^${parts.map(esc).join('.*')}$`, 'i')
+  if (parts.length < 3 || parts.some((p) => BREAK.test(p))) return { test: (s) => re.test(s) }
+  const at = parts.map((p) => new RegExp(esc(p), 'iy'))
+  const find = parts.map((p) => new RegExp(esc(p), 'ig'))
+  const last = parts.length - 1
+  return {
+    test(value) {
+      const s = String(value)
+      if (BREAK.test(s)) return false
+      const tail = s.length - parts[last].length
+      at[0].lastIndex = 0
+      at[last].lastIndex = tail
+      if (tail < parts[0].length || !at[0].test(s) || !at[last].test(s)) return false
+      let pos = parts[0].length
+      for (let i = 1; i < last; i++) {
+        find[i].lastIndex = pos
+        const m = find[i].exec(s)
+        if (!m || m.index + parts[i].length > tail) return false
+        pos = m.index + parts[i].length
+      }
+      return true
+    },
+  }
 }
 
 // File globs for allowPaths: `**` crosses directories, `*` and `?` do not.
@@ -112,14 +141,118 @@ export function pathMatches(text) {
   return out
 }
 
-const EMAIL = /[^\s<>"'(),;:@]+@[^\s<>"'(),;:@]+\.[A-Za-z]{2,}/g
-const TRAILER = /^\s*([A-Za-z][A-Za-z0-9-]*):\s+(.*)$/
+// Addresses are found from each `@` outwards, never by a regex that starts at every
+// character: `[local]+@…` starts a match at each character of a run of local-part
+// characters and reads to the run's end looking for the `@`, so a line of n letters cost
+// n²/2 steps — 8 s for a commit of three long lines, minutes for a minified bundle
+// (DG-31). The scan below finds what `text.matchAll(/[local]+@domain/g)` found — the
+// same addresses, in the same order — reading each character a bounded number of times:
+// a match holds exactly one `@`; its local part is the run of local characters before
+// that `@`, cut where the previous match ended; its domain is read forwards from the
+// `@` by `domain(s, i)`, which returns where the match ends or -1.
+//
+// The character classes are tables indexed by UTF-16 code unit, each filled by the
+// class's own regex — over all 65,536 units for the class that takes non-ASCII
+// characters, over the 128 ASCII ones for the classes that take none — so a table
+// tests exactly what the pattern tested.
+const table = (re, size = 128) => {
+  const t = new Uint8Array(65536)
+  for (let c = 0; c < size; c++) t[c] = re.test(String.fromCharCode(c)) ? 1 : 0
+  return t
+}
+export const CLASS = {
+  local: table(/[A-Za-z0-9._%+-]/),
+  host: table(/[A-Za-z0-9-]/),
+  alpha: table(/[A-Za-z]/),
+  loose: table(/[^\s<>"'(),;:@]/, 65536),
+}
+const DOT = 46
+
+export function addressesIn(text, local, domain) {
+  const s = String(text)
+  const out = []
+  let from = 0
+  let a = s.indexOf('@')
+  while (a !== -1) {
+    let start = a
+    while (start > from && local[s.charCodeAt(start - 1)] === 1) start--
+    const end = start < a ? domain(s, a + 1) : -1
+    if (end === -1) a = s.indexOf('@', a + 1)
+    else {
+      out.push(s.slice(start, end))
+      from = end
+      a = s.indexOf('@', end)
+    }
+  }
+  return out
+}
+
+// `[^\s<>"'(),;:@]+@[^\s<>"'(),;:@]+\.[A-Za-z]{2,}` — an address in a trailer: the domain
+// is its run up to the last dot with two letters after it, and those letters.
+function looseDomain(s, i) {
+  const { loose, alpha } = CLASS
+  let e = i
+  while (loose[s.charCodeAt(e)] === 1) e++
+  for (let d = e - 1; d > i; d--) {
+    if (s.charCodeAt(d) === DOT && alpha[s.charCodeAt(d + 1)] === 1 && alpha[s.charCodeAt(d + 2)] === 1) {
+      let f = d + 3
+      while (alpha[s.charCodeAt(f)] === 1) f++
+      return f
+    }
+  }
+  return -1
+}
+const looseEmails = (text) => addressesIn(text, CLASS.loose, looseDomain)
+
+const TRAILER = /^\s*([A-Za-z][A-Za-z0-9-]*):(?=(\s+))\2(.*)$/
+// The value of a trailer-shaped line, or null. The whitespace after the colon is taken
+// whole — `(?=(\s+))\2` is an atomic `\s+` — because `\s+(.*)$` gave it back one
+// character at a time when the value held a CR, quadratic in the run (DG-31); giving
+// it back never made a match, since the CR is still ahead of `.*`.
+const trailerOf = (line) => {
+  const m = line.match(TRAILER)
+  return m && { key: m[1], value: m[3] }
+}
 
 // An address in free text — a message body, an added line — where it is followed by a
 // path or a port as often as by a space: the domain stops at the first character a host
 // name cannot hold, so `git@git.example.internal/group/repo.git` is at that host.
-const TEXT_EMAIL = /[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])/g
-export const textEmails = (text) => [...String(text).matchAll(TEXT_EMAIL)].map((m) => m[0])
+// `[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?![A-Za-z0-9-])`: the domain is
+// its labels as far as each ends in a dot, up to the last label after a dot that is
+// letters only, two or more.
+function hostDomain(s, i) {
+  const { host, alpha } = CLASS
+  let best = -1
+  let dots = 0
+  for (let p = i; ; ) {
+    let e = p
+    let letters = true
+    while (host[s.charCodeAt(e)] === 1) {
+      if (alpha[s.charCodeAt(e)] !== 1) letters = false
+      e++
+    }
+    if (e === p) return best
+    if (dots > 0 && letters && e - p >= 2) best = e
+    if (s.charCodeAt(e) !== DOT) return best
+    dots++
+    p = e + 1
+  }
+}
+export const textEmails = (text) => addressesIn(text, CLASS.local, hostDomain)
+
+// `<…>` spans out, as `.replace(/<[^>]*>/g, '')` takes them — without reading to the end
+// of the line from every `<` that has no `>` after it.
+function stripAngles(s) {
+  let out = ''
+  let i = 0
+  for (;;) {
+    const lt = s.indexOf('<', i)
+    const gt = lt === -1 ? -1 : s.indexOf('>', lt + 1)
+    if (gt === -1) return out + s.slice(i)
+    out += s.slice(i, lt)
+    i = gt + 1
+  }
+}
 
 // Trailer-shaped lines — `Token: value` — and the addresses in them. Every one counts:
 // Co-authored-by and Signed-off-by are the common ones, but a Reviewed-by publishes
@@ -129,10 +262,10 @@ export function trailers(message) {
   String(message ?? '')
     .split('\n')
     .forEach((line, i) => {
-      const m = line.match(TRAILER)
-      if (!m) return
-      const name = m[2].replace(/<[^>]*>/g, '').trim()
-      for (const e of m[2].matchAll(EMAIL)) out.push({ key: m[1], email: e[0], name, line: i + 1 })
+      const t = trailerOf(line)
+      if (!t) return
+      const name = stripAngles(t.value).trim()
+      for (const email of looseEmails(t.value)) out.push({ key: t.key, email, name, line: i + 1 })
     })
   return out
 }
@@ -217,7 +350,7 @@ export function scanner(cfg) {
       termsIn(msg, line)
       pathsIn(msg, line)
       // A trailer's addresses were read above; one they missed is read here.
-      domainsIn(msg, line, TRAILER.test(line) ? [...line.matchAll(EMAIL)].map((m) => m[0]) : [])
+      domainsIn(msg, line, trailerOf(line) ? looseEmails(line) : [])
     }
     // A file's name is published with it. One that carries a term is a finding, and
     // it is never printed: every line in it is shown under a masked name instead.

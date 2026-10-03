@@ -242,6 +242,23 @@ read whole, with the same output. Reading binary files costs time where there ar
 ones: a synthetic history with 336 MiB of random blobs under `-diff` takes 5.5 s, where
 0.2 s read none of them.
 
+## Limits
+
+- **Git LFS content is not read.** A file tracked by Git LFS is a pointer in the commit,
+  and the pointer is what disclosegate reads. The content goes to the forge's LFS store
+  through git-lfs's own pre-push hook, beside the push and unread: an address inside an
+  LFS-tracked file reaches that store, and no `unread` finding names the file (DG-32).
+- **What a binary holds compressed** — a zip entry, a PDF stream, a PNG text chunk — is
+  bytes to the rules, not text.
+- **A file past the read limits** is read up to there and reported as `unread`, never
+  skipped silently.
+- **A `/regex/` term runs as you wrote it.** The built-in rules take time in proportion
+  to a line — a minified bundle or a base64 line of several MB is read in milliseconds —
+  but a term written as a regular expression is yours, and one with nested quantifiers,
+  such as `/(a+)+b/`, can take minutes on a long line. That costs time, never coverage:
+  a hook that is interrupted refuses the push. A plain-string term is a literal search
+  and stays fast. The same holds for a term the repository file adds.
+
 ## What it never does
 
 - It **never sends** anything anywhere. No network request, no telemetry, no update
