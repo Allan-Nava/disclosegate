@@ -344,7 +344,9 @@ const oldTrailers = (message) => {
   message.split('\n').forEach((line, i) => {
     const m = line.match(OLD.trailer)
     if (!m) return
-    const name = m[2].replace(/<[^>]*>/g, '').trim()
+    // `split(re).join('')` is `replace(re, '')` for a pattern without groups: the old
+    // pattern, not a sanitiser — the name is compared, never rendered.
+    const name = m[2].split(/<[^>]*>/).join('').trim()
     for (const e of m[2].matchAll(OLD.loose)) out.push({ key: m[1], email: e[0], name, line: i + 1 })
   })
   return out
