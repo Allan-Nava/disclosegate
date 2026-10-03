@@ -44,7 +44,9 @@ test/                  node:test suites — rules.test.mjs (units; the only file
                        caller modelled on pre-commit's), framing (a history built to forge
                        the log's framing, read on every path; output that cannot be
                        framed exits 2), attributes (DG-30: `-diff`, `binary`, drivers,
-                       real binaries, the read limit — on every path), changelog;
+                       real binaries, the read limit — on every path), lfs (DG-32: pointers
+                       read as their content, a real git-lfs push skipped without it),
+                       changelog;
                        helpers.mjs builds the sandbox
 .disclosegate.json     this repository's own repo config: allowPaths for rules.test.mjs only
 .github/workflows/     ci.yml (npm test on Node 18/20/22/24 without npm install; the tool on
@@ -169,6 +171,18 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    commit adding lines of 25k, 50k and 100k letters, 8.5 s before and 0.12 s after; a
    5.3 MB base64url line, stopped at 300 s before and 0.15 s after; same output on
    57 real histories.
+11. **An LFS file is read as its content** (DG-32). The commit holds a pointer; the
+   content reaches the forge's LFS store through git-lfs's own pre-push hook, which
+   `install --force` chains after disclosegate's, so a refusal uploads nothing (a real
+   git-lfs push in `test/lfs.test.mjs` shows both sides). `lfsContent` in
+   `bin/lib/git.mjs` takes a file whose added lines hold an `oid sha256:` line, confirms
+   the blob at the path is a whole pointer (version line first, under 1024 bytes — a doc
+   quoting one is left alone), and reads the object from where git-lfs reads it,
+   `<common git dir>/lfs/objects/aa/bb/<oid>` or under `lfs.storage`, as the file's lines
+   from 1, within the same budgets. Content not on this machine is `unread`: git-lfs
+   cannot upload it either, but the guard cannot vouch for it — so a `--history` scan of
+   a clone with only the current objects names every older one; `git lfs fetch --all`
+   first. No git-lfs is needed to read: the pointer and the object are plain files.
 
 ## Verifying a change
 

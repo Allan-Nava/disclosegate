@@ -6,6 +6,13 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 ## [Unreleased]
 
 ### Added
+- A file tracked by Git LFS is read as its content, not its pointer. The content is read
+  from the repository's local LFS object store (or `lfs.storage`), as the file's lines,
+  through every rule; content not on this machine is an `unread` finding. git-lfs's own
+  pre-push hook, chained after disclosegate's by `install --force`, uploads nothing when
+  the push is refused — a real git-lfs push in the tests shows both sides. This changes
+  findings: an address inside an LFS file now refuses the push, and `scan --history` over
+  a clone without the older LFS objects names each as `unread` (DG-32).
 - The site has a social card: `assets/social-preview.png`, rendered from
   `assets/social-preview.html` with headless Chrome, named in the page's `og:image` and
   `twitter:image`. The npm package does not carry it (DG-23).

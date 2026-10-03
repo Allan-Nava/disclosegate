@@ -29,7 +29,7 @@ export const PATH_PATTERNS = [
 export const RANK = { 'email:blocked': 0, 'email:unlisted': 1, term: 2, name: 3, path: 4, unread: 5 }
 
 // What an `unread` finding says, by why.
-export const UNREAD = { limit: 'read in part — past the read limit', binary: 'not read — git printed it as binary' }
+export const UNREAD = { limit: 'read in part — past the read limit', binary: 'not read — git printed it as binary', lfs: 'not read — its Git LFS content is not on this machine' }
 
 // The first two characters, an ellipsis and the length: enough to tell two findings
 // apart, too little to publish the thing itself in a CI log.
