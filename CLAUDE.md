@@ -23,12 +23,13 @@ run on it.
 ```
 bin/disclosegate.mjs   the CLI: pre-push · scan · install · uninstall · init · doctor · check;
                        its header comment is the usage text and the site's command list
-bin/lib/               rules (pure: the four rules, masking, ordering — no fs, no git), git
-                       (one `git log -p --cc -U0 --format=%H` pass for the patches and one
-                       `cat-file --batch` for the commit objects, settings pinned —
-                       streamed a commit at a time for `scan --history`; annotated tags
-                       through `cat-file --batch` too; the pre-push protocol; the patch
-                       parser, a merge's combined hunks included),
+bin/lib/               rules (pure: the four rules and `unread`, masking, ordering — no fs,
+                       no git), git (one `git log -p --cc --text -U0 --format=%H` pass for
+                       the patches and one `cat-file --batch` for the commit objects,
+                       settings pinned — streamed a commit at a time on every path;
+                       annotated tags through `cat-file --batch` too; the pre-push
+                       protocol; the patch parser, a byte reader with a read limit, a
+                       merge's combined hunks included),
                        config (user file → repository file, the trust order, remotes,
                        the init template), report (text and JSON, masked),
                        hook (hooks dir, the hook script, the marker, install/uninstall,
@@ -41,7 +42,9 @@ test/                  node:test suites — rules.test.mjs (units; the only file
                        byte for byte), precommit (`--pre-commit` and a real push through a
                        caller modelled on pre-commit's), framing (a history built to forge
                        the log's framing, read on every path; output that cannot be
-                       framed exits 2), changelog; helpers.mjs builds the sandbox
+                       framed exits 2), attributes (DG-30: `-diff`, `binary`, drivers,
+                       real binaries, the read limit — on every path), changelog;
+                       helpers.mjs builds the sandbox
 .disclosegate.json     this repository's own repo config: allowPaths for rules.test.mjs only
 .github/workflows/     ci.yml (npm test on Node 18/20/22/24 without npm install; the tool on
                        its own history; a refused push by hand; pack; backlog), release.yml
@@ -67,7 +70,8 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    on a forge stays reachable by SHA after a force-push; nothing downstream undoes it.
 2. **Fail closed.** A finding in block mode, a configuration error and an internal error
    all exit non-zero, so the hook refuses the push. A hook that cannot find its binary
-   refuses too. The only way past is `--no-verify`, which is the user's decision.
+   refuses too. So does a file the guard did not read in full: `unread` is a finding. The
+   only way past is `--no-verify`, which is the user's decision.
 3. **The output is public.** Matches are masked — two characters, an ellipsis, the
    length — everywhere but a terminal with `--show`. Config errors name the key, never
    the value. Paths under the home directory print as `~`. `doctor` prints counts.
@@ -84,16 +88,18 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    with the same arguments and stdin (held in a shell variable), and its exit code is the
    hook's; a push disclosegate refuses never reaches it.
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
-   `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
-   diffs, `diff.relative`, `diff.submodule` — and parses hunks by their counts, so an
-   added line that begins with `++ ` is content. A merge is read through `--cc`, its
-   combined hunks by the same counts, and only a line new to every parent is its own.
-   `scan --history` streams the same pass (`streamCommits`, `splitLog`) and holds
-   findings, never commits; whatever it reads must print exactly what the collected
-   reading (`logCommits`) would — `history.test.mjs` says so.
-8. **No byte frames the log.** Content can hold anything — 0x01, a NUL past git's
-   8,000-byte binary sniff (git prints that file as text), a fake header, a bare sha — in
-   a line, a message or a name, so nothing a commit carries may delimit anything. The log
+   `git log -p` output — pager, signatures, external diff, textconv, binary detection
+   (`--text`), quoted paths, root diffs, `diff.relative`, `diff.submodule` — and parses
+   hunks by their counts, so an added line that begins with `++ ` is content. A merge is
+   read through `--cc`, its combined hunks by the same counts, and only a line new to
+   every parent is its own. Every reading — the hook, `--pre-commit`, `scan`, `scan
+   --history` — streams the same pass (`streamCommits`, `streamSets`, `splitLog`) and
+   holds findings, never commits; whatever it reads must print exactly what the
+   collected reading (`logCommits`) would — `history.test.mjs` says so.
+8. **No byte frames the log.** Content can hold anything — 0x01, a NUL (every file is
+   printed as text, invariant 9), a CR, a fake header, a bare sha — in a line, a message
+   or a name, so nothing a commit carries may delimit anything; a line ends at the
+   newline byte and nowhere else. The log
    format is `--format=%H`: the sha alone on its line, recognised only outside a hunk,
    while every line inside one is consumed by the hunk's counts. Author, committer and
    message come from the commit object through `git cat-file --batch`, framed by the byte
@@ -104,6 +110,33 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    and over one `git show` per commit, which costs 44 s instead of 0.4 s on a synthetic
    4,000-commit `--history` (DG-29). Do not put a format placeholder that prints commit
    content back into `FORMAT`.
+9. **Nothing is binary to the reading.** git prints `Binary files … differ`, and no
+   line, for a file marked `-diff` or `binary` (`.gitattributes`, `.git/info/attributes`,
+   the user's `core.attributesFile`), one whose diff driver sets `binary`, one over
+   `core.bigFileThreshold`, and one with a NUL in its first 8,000 bytes — so a lock file
+   marked `-diff` carried a work address past 0.0.3 (DG-30). Every diff runs with
+   `--text`, which ignores all of these at once. Chosen over overriding attributes:
+   `-c core.attributesFile=/dev/null` loses to the in-tree `.gitattributes` and to
+   `info/attributes`, `--attr-source` (git 2.40) still leaves `info/attributes`, and
+   neither touches the NUL sniff or `bigFileThreshold`. `--no-textconv` and
+   `--no-ext-diff` stay: the bytes are read, never a driver's rendering. The one place
+   git ignores `--text` is the combined diff of a merge (measured on git 2.54); there a
+   `Binary files differ` sends the file to `mergeOwn` — one `diff-tree --text` per
+   parent, a line the merge's own when every parent's diff adds it. A real binary is
+   read as text by every rule, line by line — chosen over extracting strings (a regex
+   over the line already finds what a strings pass would) and over reporting it unread
+   (a home path in a compiled binary, an address in an image's metadata are leaks).
+   Read, it is bounded: `READ_LIMIT` (100 MiB of one file's added text in a commit,
+   where GitHub refuses a file) and `COMMIT_LIMIT` (512 MiB of a commit's, about where
+   the 0.0.3 collected reading failed on a string too long for V8). Past either, a line
+   is consumed by its marker byte and not decoded, so the framing holds, and the file
+   is an `unread` finding — refusing in block mode, never a silent skip; a `Binary files`
+   line in a two-sided diff, which `--text` should never let git write, is `unread` too.
+   A line outside a hunk longer than 1 MiB is not git's: a `GitError`. Cost on a
+   synthetic history with 336 MiB of random `-diff` blobs and a 6 MiB lock file:
+   `scan --history` 0.16 s before (reading none of them), 5.5 s and 1.1 GB peak RSS
+   after; `--text` alone, without the byte reader, took 9.3 s and crashed the hook path
+   on a string over V8's limit. Unchanged on six real histories.
 
 ## Verifying a change
 

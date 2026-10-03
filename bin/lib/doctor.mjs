@@ -3,7 +3,7 @@
 // and remote names — never a list's values, which are the private part.
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { git } from './git.mjs'
+import { COMMIT_LIMIT, git, READ_LIMIT } from './git.mjs'
 import { BACKUP_SUFFIX, hookState, hooksDir } from './hook.mjs'
 import { loadConfig, placeholders, remoteVerdict, tildify } from './config.mjs'
 
@@ -46,6 +46,7 @@ export function doctor({ cwd, root, env = process.env }) {
   row('rules', rules.join(' · '))
   row('mode', e.mode === 'audit' ? 'audit — findings are printed, pushes go through' : 'block — a finding refuses the push')
   row('allowPaths', e.allowPaths.length ? `${e.allowPaths.join(', ')} (path rule only)` : 'none')
+  row('reading', `every added line as text — binary files and -diff or binary attributes too — up to ${READ_LIMIT / 1024 / 1024} MiB of a file and ${COMMIT_LIMIT / 1024 / 1024} MiB of a commit; a file past either is an unread finding`)
 
   const { dir, viaHooksPath } = hooksDir(cwd, root)
   const file = join(dir, 'pre-push')

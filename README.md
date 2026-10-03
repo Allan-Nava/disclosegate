@@ -178,14 +178,35 @@ a line one side already had was read in that side's own commit, or is already pu
 
 Nothing a commit carries can change where the reading thinks one commit ends and the
 next begins: a control byte, a NUL that git still prints as text, a line shaped like a
-commit header, in a file, a message or a name, is read as what it is. A file git prints
-as binary has no lines to read. If the output of `git` is ever not in the shape
-disclosegate reads, that is an error — exit 2, and in the hook a refused push — never a
-shorter scan.
+commit header, in a file, a message or a name, is read as what it is. If the output of
+`git` is ever not in the shape disclosegate reads, that is an error — exit 2, and in the
+hook a refused push — never a shorter scan.
+
+**Nothing is binary to the reading.** git prints `Binary files … differ` instead of the
+lines of a file marked `-diff` or `binary` — in `.gitattributes`, in
+`.git/info/attributes` or in the file your `core.attributesFile` names — of a file whose
+diff driver says `binary`, of one larger than `core.bigFileThreshold`, and of one with a
+NUL in its first 8,000 bytes. Lock files are often marked that way. disclosegate reads all
+of them as text (`git log --text`), byte for byte: an image, an archive or a compiled
+binary goes through every rule line by line, a line being whatever ends in a newline
+byte. A `textconv` or external diff driver in your config is never run — the bytes are
+read, not a rendering of them. A merge's own lines in such a file, where git's combined
+diff ignores `--text`, are read through one diff per parent. What a binary holds
+compressed — a zip entry, a PDF stream, a PNG text chunk — is bytes to the rules, not
+text.
+
+One finding is about the reading itself rather than a rule: **`unread`**. A file's added
+lines are read up to 100 MiB in one commit — the size GitHub refuses a file at — and a
+commit's up to 512 MiB in all, so a commit of large binaries costs bounded time and
+memory. A file past either is read up to there and then named as an `unread` finding:
+nothing is skipped without saying so. It refuses the push in block mode like any other
+finding — the guard cannot vouch for what it did not read — and is printed in audit mode
+and in `--json`. Read the file yourself; if it is clean, `git push --no-verify` is your
+decision to make.
 
 Findings are listed worst first: a blocked domain, an address outside the allowlist, a
-term, a name, a path. A file whose *name* carries a term is never printed by name; its
-lines are shown under a masked one.
+term, a name, a path, a file not read in full. A file whose *name* carries a term is never
+printed by name; its lines are shown under a masked one.
 
 ## Output
 
@@ -213,10 +234,13 @@ disclosegate init                    # the template user file; refuses to overwr
 disclosegate doctor                  # config found, rules active, hook installed, remotes enforced
 ```
 
-`scan --history` reads the log as a stream: each commit goes through the rules as git
-writes it and only its findings are kept, so a history of any size is read in about the
-memory of its largest commit — on a synthetic 4,000-commit history with 250 MB of
-patches, a peak of 209 MB against 1.1 GB when it was read whole, with the same output.
+Every reading — the hook's, `scan`'s, `scan --history`'s — is a stream: each commit goes
+through the rules as git writes it and only its findings are kept, so a push or a history
+of any size is read in about the memory of its largest commit — on a synthetic
+4,000-commit history with 250 MB of patches, a peak of 209 MB against 1.1 GB when it was
+read whole, with the same output. Reading binary files costs time where there are large
+ones: a synthetic history with 336 MiB of random blobs under `-diff` takes 5.5 s, where
+0.2 s read none of them.
 
 ## What it never does
 

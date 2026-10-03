@@ -196,10 +196,38 @@ and rates are published, the matches are not.
   readings identical to 0.0.3 on six real histories and three synthetic ones; `scan
   --history` on a synthetic 4,000 commits as fast as before, where one `git show` per
   commit would take 44 s. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
-- [ ] **DG-30 — A `-diff` attribute hides a file's lines**: a `.gitattributes` in the
+- [x] **DG-30 — A `-diff` attribute hides a file's lines**: a `.gitattributes` in the
   working tree that marks a path `-diff` or `binary` (lock files often are) makes
   `git log -p` print `Binary files … differ` for it, so its added lines are never read —
   an internal registry host in a lock file passes. `--text` would read real binaries as
   lines too; decide between that with a cap, ignoring the `diff` attribute for text git
-  would otherwise print, or saying so in the README. Found during DG-29.
-  <!-- dg: prio=med size=S labels=rules,hook -->
+  would otherwise print, or saying so in the README. Found during DG-29. Done 2026-10-03:
+  `--text` on every diff — it also beats `info/attributes`, the user's
+  `core.attributesFile`, a driver set to `binary`, `core.bigFileThreshold` and the NUL
+  sniff, none of which an attribute override reaches — with `--no-textconv` and
+  `--no-ext-diff` kept; a merge's combined diff ignores `--text`, so a file it calls
+  binary is read through one `diff-tree --text` per parent. Real binaries are read as
+  text by every rule; the parser reads bytes, splits on the newline byte only, and reads
+  a file's added text up to 100 MiB in a commit and a commit's up to 512 MiB, a file past
+  either being a new `unread` finding. The hook, `--pre-commit` and `scan` stream like
+  `--history`. Tests on every path, each shown failing before the fix; same output on
+  six real histories; a synthetic one with 336 MiB of random `-diff` blobs takes 5.5 s
+  against 0.16 s. <!-- dg: prio=med size=S labels=rules,hook ver=main -->
+- [ ] **DG-31 — A long run of letters makes the address rule quadratic**: `TEXT_EMAIL` in
+  `bin/lib/rules.mjs` starts a match at every character of a run of `[A-Za-z0-9._%+-]`
+  and backtracks to its end looking for `@`, so a line of n such characters costs n²/2
+  steps whenever `blockedDomains` is set. A commit adding lines of 25k, 50k and 100k
+  letters took 8 s on main; a minified bundle or a base64 blob with a line of a few
+  hundred kilobytes stalls the hook for minutes — fail closed, since an interrupted hook
+  refuses the push, but a guard nobody waits for gets `--no-verify`. DG-30 widens the
+  exposure: binary files are read now. Anchor the match on the `@` (find each `@`, then
+  extend left and right) and add a timing test on a long line. Found during DG-30.
+  <!-- dg: prio=med size=S labels=rules -->
+- [ ] **DG-32 — Git LFS content is not read**: a file tracked by Git LFS is a pointer in
+  the commit, and its content goes to the LFS server through git-lfs's own pre-push
+  hook, beside the push disclosegate reads — so a work address in an LFS-tracked file
+  reaches the forge's LFS store unread, and `unread` does not name it either. Read the
+  objects `git lfs pre-push` would upload (`git lfs ls-files` over the pushed range, the
+  local `.git/lfs/objects`), or at least report each pointer as `unread`; and check that
+  the chained-hook order lets disclosegate run before git-lfs uploads. Found during DG-30.
+  <!-- dg: prio=med size=M labels=rules,hook -->

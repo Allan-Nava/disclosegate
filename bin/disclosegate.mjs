@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { check } from './lib/check.mjs'
 import { ConfigError, inside, loadConfig, remoteVerdict, TEMPLATE, tildify, userConfigPath } from './lib/config.mjs'
 import { doctor } from './lib/doctor.mjs'
-import { allTags, commitsForSets, defaultRevs, GitError, logCommits, pushRevSets, repoRoot, stagedCommit, streamCommits, tagsAt } from './lib/git.mjs'
+import { allTags, defaultRevs, GitError, pushRevSets, repoRoot, stagedCommit, streamCommits, streamSets, tagsAt } from './lib/git.mjs'
 import { hooksDir, install, uninstall } from './lib/hook.mjs'
 import { formatText, toJSON } from './lib/report.mjs'
 import { scanner, scanCommits, sortFindings } from './lib/rules.mjs'
@@ -108,8 +108,7 @@ function preCommitPush(args, cwd) {
     err(`disclosegate: remote ${name} is not enforced (${v.reason}) — not checked`)
     return 0
   }
-  const commits = [...logCommits(cwd, revs), ...tagsAt(cwd, [tip])]
-  return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
+  return scanReading(streamCommits(cwd, revs), () => tagsAt(cwd, [tip]), effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
 }
 
 function prePush(args, cwd) {
@@ -125,23 +124,22 @@ function prePush(args, cwd) {
     return 0
   }
   const { sets, tips } = pushRevSets(readFileSync(0, 'utf8'), remoteName, cwd)
-  const commits = [...commitsForSets(cwd, sets), ...(tips.length ? tagsAt(cwd, tips) : [])]
-  return report(commits, effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
+  return scanReading(streamSets(cwd, sets), () => (tips.length ? tagsAt(cwd, tips) : []), effective, warnings, { json: args.includes('--json'), context: 'pre-push' })
 }
 
-// The whole history, streamed: each commit goes through the rules as git writes it and
-// only its findings are kept, so a repository of any size is read in the memory of its
-// largest commit. The annotated tags follow, read as before. Same findings, same order,
-// same output as reading it all first.
-async function scanHistory(cwd, cfg, warnings, opts) {
+// Every reading is streamed — the hook's, `scan`'s and `scan --history`'s: each commit
+// goes through the rules as git writes it and only its findings are kept, so a push or a
+// history of any size is read in the memory of its largest commit. The annotated tags
+// follow. Same findings, same order, same output as reading it all first.
+async function scanReading(commits, tagsOf, cfg, warnings, opts) {
   const scan = scanner(cfg)
   const findings = []
   let ci = 0
-  for await (const c of streamCommits(cwd, ['--all'])) for (const f of scan(c, ci++)) findings.push(f)
-  const commits = ci
-  const tags = allTags(cwd)
+  for await (const c of commits) for (const f of scan(c, ci++)) findings.push(f)
+  const n = ci
+  const tags = tagsOf()
   for (const t of tags) for (const f of scan(t, ci++)) findings.push(f)
-  return reportFindings(sortFindings(findings), { commits, tags: tags.length }, cfg, warnings, opts)
+  return reportFindings(sortFindings(findings), { commits: n, tags: tags.length }, cfg, warnings, opts)
 }
 
 function scan(args, cwd) {
@@ -149,15 +147,11 @@ function scan(args, cwd) {
   if ([flags.range, flags.staged, flags.history].filter(Boolean).length > 1) throw new UsageError('pick one of --range, --staged, --history')
   const root = needRepo(cwd)
   const { effective, warnings } = loadConfig({ repoRoot: root })
-  if (flags.history) return scanHistory(cwd, effective, warnings, { json: flags.json, show: flags.show, context: 'scan' })
-  let commits
-  if (flags.staged) commits = [stagedCommit(cwd)]
-  else if (flags.range) commits = logCommits(cwd, [flags.range])
-  else {
-    const revs = defaultRevs(cwd)
-    commits = revs ? logCommits(cwd, revs) : []
-  }
-  return report(commits, effective, warnings, { json: flags.json, show: flags.show, context: 'scan' })
+  const opts = { json: flags.json, show: flags.show, context: 'scan' }
+  if (flags.staged) return report([stagedCommit(cwd)], effective, warnings, opts)
+  if (flags.history) return scanReading(streamCommits(cwd, ['--all']), () => allTags(cwd), effective, warnings, opts)
+  const revs = flags.range ? [flags.range] : defaultRevs(cwd)
+  return scanReading(revs ? streamCommits(cwd, revs) : [], () => [], effective, warnings, opts)
 }
 
 function doInstall(args, cwd) {

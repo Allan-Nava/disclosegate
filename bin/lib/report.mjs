@@ -27,6 +27,7 @@ export function formatText(findings, { reveal = false, mode = 'block', context =
     out.push('  a message or a trailer               git rebase -i <base>, then reword')
     out.push('  an added line                        edit the file, then git commit --fixup and git rebase -i --autosquash')
     if (findings.some((f) => f.tag)) out.push('  a tagger or a tag message            git tag -f -a <tag> <tag>^{}, as the right user.email')
+    if (findings.some((f) => f.rule === 'unread')) out.push('  a file not read in full              read it yourself; if it is clean, git push --no-verify')
   }
   if (!reveal) out.push('Matches are masked. `disclosegate scan --show` in a terminal prints them in full.')
   return out.join('\n')
