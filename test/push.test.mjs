@@ -265,6 +265,19 @@ test("a merge's own lines — a conflict resolved with new text — are read", (
   assert.match(r.out, /2 findings in 1 of 3 commits/)
 })
 
+// DG-29: git prints a file holding a 0x01 (and no NUL in its first 8,000 bytes) as text.
+// 0.0.3 cut its log at that byte, so the lines after it went unread and the commit was
+// read twice.
+test('a 0x01 in an added line hides no line after it, and the commit is counted once', () => {
+  const sb = guarded()
+  sb.commit({ file: 'ctl.txt', content: `one\n\x01two\n${HOME_PATH}\n` })
+  const r = sb.push()
+  assert.notEqual(r.code, 0, r.out)
+  assert.ok(!sb.remoteHas('refs/heads/main'), 'nothing reached the remote')
+  assert.match(r.out, /path\s+[0-9a-f]{7}\s+ctl\.txt:3\s/)
+  assert.match(r.out, /1 finding in 1 of 1 commit — push refused/)
+})
+
 test("a merge with no lines of its own adds no finding: a parent's line is read once", () => {
   const sb = guarded()
   sb.commit()

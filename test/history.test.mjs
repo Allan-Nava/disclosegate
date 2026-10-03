@@ -73,10 +73,10 @@ test('the splitter yields what parseLog does, wherever a chunk ends — inside a
   }
 })
 
-test('the splitter holds one commit at a time, and hands each one over as soon as the next begins', () => {
+test('the splitter holds one line and one commit at a time, and hands each commit over as soon as the next begins', () => {
   const sb = fixture()
   const buf = rawLog(sb)
-  const longest = Math.max(...buf.toString('utf8').split('\x01').map((c) => Buffer.byteLength(c) + 1))
+  const longest = Math.max(...buf.toString('utf8').split('\n').map((l) => Buffer.byteLength(l)))
   const s = splitLog()
   const got = []
   let peak = 0
@@ -87,7 +87,7 @@ test('the splitter holds one commit at a time, and hands each one over as soon a
   }
   got.push(...s.end())
   assert.equal(s.pending, '')
-  assert.ok(peak <= longest + 64, `peak ${peak} bytes, longest commit ${longest}`)
+  assert.ok(peak <= longest + 64, `peak ${peak} bytes, longest line ${longest}`)
   assert.deepEqual(got, parseLog(buf.toString('utf8')))
 })
 

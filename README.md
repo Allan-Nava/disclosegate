@@ -176,6 +176,13 @@ An added line is one a commit adds to its parent. A merge's are the lines new to
 parent — what resolving a conflict writes — read from its combined diff (`git log --cc`);
 a line one side already had was read in that side's own commit, or is already public.
 
+Nothing a commit carries can change where the reading thinks one commit ends and the
+next begins: a control byte, a NUL that git still prints as text, a line shaped like a
+commit header, in a file, a message or a name, is read as what it is. A file git prints
+as binary has no lines to read. If the output of `git` is ever not in the shape
+disclosegate reads, that is an error — exit 2, and in the hook a refused push — never a
+shorter scan.
+
 Findings are listed worst first: a blocked domain, an address outside the allowlist, a
 term, a name, a path. A file whose *name* carries a term is never printed by name; its
 lines are shown under a masked one.

@@ -26,6 +26,23 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   reaches it. `doctor` reports the chain, and `uninstall` still restores the hook. A hook
   written by 0.0.3 or earlier chains once `disclosegate install` updates it (DG-21).
 
+### Fixed
+- **Security:** a 0x01 byte in an added line no longer hides the rest of its commit. The
+  log was cut into commits at every 0x01 and its header at the first 0x03, and git prints
+  a file holding those bytes as text and takes them in a message or an author name: the
+  lines after such a line went unread — a home path after it passed the hook, `scan`,
+  `scan --history` and `--pre-commit` in 0.0.3 — the commit was counted twice, a line
+  shaped like a header was read as a commit of its own, and a 0x03 in a message hid the
+  rest of the message. No byte frames the reading any more: the patches come from a
+  `git log --format=%H` whose only framing is a sha line outside every hunk, each hunk
+  consumed by its own counts, and the author, committer and message from the commit
+  object through `git cat-file --batch`, which states each object's length. Output that
+  is not in that shape is an error — exit 2, a refused push — never a shorter scan.
+  `diff.relative` and `diff.submodule` are pinned too: the first, run from a
+  subdirectory, hid every file outside it. Same readings as before on histories without
+  such bytes; `scan --history` on a synthetic 4,000-commit history with 250 MB of patches
+  took 3.4 s against 4.05 s, at the same peak memory (DG-29).
+
 ## [0.0.3] — 2026-10-03
 
 0.0.3 adds DG-18, DG-19 and DG-20 and moves the backlog tooling to backlogsync; 0.1.0

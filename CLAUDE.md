@@ -24,9 +24,10 @@ run on it.
 bin/disclosegate.mjs   the CLI: pre-push · scan · install · uninstall · init · doctor · check;
                        its header comment is the usage text and the site's command list
 bin/lib/               rules (pure: the four rules, masking, ordering — no fs, no git), git
-                       (one `git log -p --cc -U0` pass, settings pinned — streamed a
-                       commit at a time for `scan --history`; annotated tags
-                       through one `cat-file --batch`; the pre-push protocol; the patch
+                       (one `git log -p --cc -U0 --format=%H` pass for the patches and one
+                       `cat-file --batch` for the commit objects, settings pinned —
+                       streamed a commit at a time for `scan --history`; annotated tags
+                       through `cat-file --batch` too; the pre-push protocol; the patch
                        parser, a merge's combined hunks included),
                        config (user file → repository file, the trust order, remotes,
                        the init template), report (text and JSON, masked),
@@ -38,8 +39,9 @@ test/                  node:test suites — rules.test.mjs (units; the only file
                        codes), push (real `git push` through the hook into a bare remote),
                        history (the streamed `--history` held to the collected reading,
                        byte for byte), precommit (`--pre-commit` and a real push through a
-                       caller modelled on pre-commit's), changelog; helpers.mjs builds the
-                       sandbox
+                       caller modelled on pre-commit's), framing (a history built to forge
+                       the log's framing, read on every path; output that cannot be
+                       framed exits 2), changelog; helpers.mjs builds the sandbox
 .disclosegate.json     this repository's own repo config: allowPaths for rules.test.mjs only
 .github/workflows/     ci.yml (npm test on Node 18/20/22/24 without npm install; the tool on
                        its own history; a refused push by hand; pack; backlog), release.yml
@@ -83,12 +85,25 @@ CONTRIBUTING.md        local loop, release runbook with the first-publish bootst
    hook's; a push disclosegate refuses never reaches it.
 7. **What git shows is what is read.** `bin/lib/git.mjs` pins the settings that change
    `git log -p` output — pager, signatures, external diff, textconv, quoted paths, root
-   diffs — and parses hunks by their counts, so an added line that begins with `++ ` is
-   content. A merge is read through `--cc`, its combined hunks by the same counts, and
-   only a line new to every parent is its own. `scan --history` streams the same pass
-   (`streamCommits`, `splitLog`) and holds findings, never commits; whatever it reads
-   must print exactly what the collected reading (`logCommits`) would — `history.test.mjs`
-   says so.
+   diffs, `diff.relative`, `diff.submodule` — and parses hunks by their counts, so an
+   added line that begins with `++ ` is content. A merge is read through `--cc`, its
+   combined hunks by the same counts, and only a line new to every parent is its own.
+   `scan --history` streams the same pass (`streamCommits`, `splitLog`) and holds
+   findings, never commits; whatever it reads must print exactly what the collected
+   reading (`logCommits`) would — `history.test.mjs` says so.
+8. **No byte frames the log.** Content can hold anything — 0x01, a NUL past git's
+   8,000-byte binary sniff (git prints that file as text), a fake header, a bare sha — in
+   a line, a message or a name, so nothing a commit carries may delimit anything. The log
+   format is `--format=%H`: the sha alone on its line, recognised only outside a hunk,
+   while every line inside one is consumed by the hunk's counts. Author, committer and
+   message come from the commit object through `git cat-file --batch`, framed by the byte
+   length git states (one process kept open beside the streamed log, one request per
+   commit). A line outside a hunk that git does not write, a hunk cut short, a sha
+   `cat-file` does not return as a commit: each is a `GitError`, exit 2, a refused push —
+   never a shorter reading. Chosen over a separator (NUL with `-z` is forgeable, above)
+   and over one `git show` per commit, which costs 44 s instead of 0.4 s on a synthetic
+   4,000-commit `--history` (DG-29). Do not put a format placeholder that prints commit
+   content back into `FORMAT`.
 
 ## Verifying a change
 
