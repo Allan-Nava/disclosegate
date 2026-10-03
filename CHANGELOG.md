@@ -75,6 +75,12 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
   subdirectory, hid every file outside it. Same readings as before on histories without
   such bytes; `scan --history` on a synthetic 4,000-commit history with 250 MB of patches
   took 3.4 s against 4.05 s, at the same peak memory (DG-29).
+- `init` creates the user file in one call that fails if anything is at the path, and
+  writes the template through it. It asked whether the file existed and then wrote it,
+  following a link, so a link put there in between — or a dangling one already there
+  pointing outside the repository — took the write where it led. A link at the path,
+  dangling or not, is now refused and nothing goes through it; the user file must still
+  not resolve inside the repository (DG-34).
 
 ## [0.0.3] — 2026-10-03
 

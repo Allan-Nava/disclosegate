@@ -132,7 +132,7 @@ Two files, in a trust order.
 the private lists. It **must never live in a repository** — what it lists is exactly
 what must not be published — and disclosegate refuses to run with a user file inside the
 repository it is checking. `disclosegate init` writes a template of placeholders with
-comments, and never overwrites an existing file:
+comments, and never overwrites an existing file nor writes through a symbolic link:
 
 ```jsonc
 {
@@ -230,7 +230,7 @@ disclosegate scan --range main..HEAD
 disclosegate scan --staged           # the index, and the identity the next commit would carry
 disclosegate scan --history          # every commit and annotated tag reachable from any ref — the audit of a repository
 disclosegate install [--force] | uninstall
-disclosegate init                    # the template user file; refuses to overwrite
+disclosegate init                    # the template user file; refuses to overwrite or follow a link
 disclosegate doctor                  # config found, rules active, hook installed, remotes enforced
 ```
 

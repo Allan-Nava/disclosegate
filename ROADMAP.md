@@ -4,7 +4,7 @@
 
 > This page is **generated** from [BACKLOG.md](BACKLOG.md), the single source of truth for planned work. Regenerate it with `npm run roadmap` after editing the backlog — CI fails when the two disagree.
 
-**33 items · 27 shipped · 6 open · 3 milestones.**
+**34 items · 28 shipped · 6 open · 3 milestones.**
 
 ## At a glance
 
@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | **v0.0.1 — The guard, test-first** | now | `##########` 100% | 0 | 13 |
 | **v0.1.0 — A week in audit mode** | next | `######....` 63% | 3 | 5 |
-| **v0.2.0 — What the first version does not read** | later | `########..` 75% | 3 | 9 |
+| **v0.2.0 — What the first version does not read** | later | `########..` 77% | 3 | 10 |
 
 ## v0.0.1 — The guard, test-first
 
@@ -55,3 +55,4 @@
 - [x] **DG-31** — A long run of letters makes the address rule quadratic · med · S · rules · `main`
 - [ ] **DG-32** — Git LFS content is not read · med · M · rules, hook
 - [ ] **DG-33** — A trailer that ends in a CR is not read as a trailer · med · S · rules
+- [x] **DG-34** — `init` checks for the user file, then writes it · med · S · config, tests · `main`

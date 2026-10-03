@@ -1,12 +1,32 @@
 // The commands run by hand: scan, install and uninstall, init, doctor, and the exit
 // codes that tell a finding (1) from a usage or configuration error (2).
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 import { stripComments } from '../bin/lib/config.mjs'
 import { placeholderEmail } from '../bin/lib/check.mjs'
 import { ALICE, BOB, HOME_PATH, sandbox } from './helpers.mjs'
+
+// A file's text and mode through one descriptor: the mode is that of the bytes read,
+// with no window for the path to change between a stat and a read (DG-34).
+function held(file) {
+  const fd = openSync(file, 'r')
+  try {
+    return { text: readFileSync(fd, 'utf8'), mode: fstatSync(fd).mode }
+  } finally {
+    closeSync(fd)
+  }
+}
+// A file's text, or null when there is none — one read, no existence check before it.
+function contents(file) {
+  try {
+    return readFileSync(file, 'utf8')
+  } catch (e) {
+    if (e.code === 'ENOENT') return null
+    throw e
+  }
+}
 
 test('scan --range --json: machine output, matches masked, exit 1 in block mode', () => {
   const sb = sandbox()
@@ -86,9 +106,10 @@ test('install refuses to clobber a hook it did not write; --force moves it and c
 
   const f = sb.run(['install', '--force'])
   assert.equal(f.code, 0, f.out)
-  assert.match(readFileSync(hook, 'utf8'), /disclosegate-managed-hook/)
+  const installed = held(hook)
+  assert.match(installed.text, /disclosegate-managed-hook/)
+  assert.ok(installed.mode & 0o100, 'executable')
   assert.equal(readFileSync(`${hook}.before-disclosegate`, 'utf8'), foreign)
-  assert.ok(statSync(hook).mode & 0o100, 'executable')
   assert.match(f.stdout, /it runs after disclosegate/)
   assert.match(sb.run(['doctor']).stdout, /installed — then pre-push\.before-disclosegate, chained/)
   assert.equal(sb.run(['install']).code, 0, 're-installing over its own hook is an update')
@@ -115,9 +136,9 @@ test('init writes a template of placeholders with comments, and refuses to overw
   const sb = sandbox()
   const r = sb.run(['init'])
   assert.equal(r.code, 0, r.out)
-  const text = readFileSync(sb.env.DISCLOSEGATE_CONFIG, 'utf8')
+  const { text, mode } = held(sb.env.DISCLOSEGATE_CONFIG)
   assert.match(text, /^\/\/ /m, 'comments')
-  assert.equal(statSync(sb.env.DISCLOSEGATE_CONFIG).mode & 0o777, 0o600)
+  assert.equal(mode & 0o777, 0o600)
   const data = JSON.parse(stripComments(text))
   for (const e of data.publicEmails) assert.ok(placeholderEmail(e), 'placeholders only')
   assert.equal(sb.run(['init']).code, 2)
@@ -141,6 +162,22 @@ test('init refuses a user config path that is a dangling symlink into the reposi
   assert.equal(r.code, 2, r.out)
   assert.match(r.stderr, /never live in one/)
   assert.ok(!existsSync(join(sb.work, 'mine.json')), 'nothing was written through the link')
+})
+
+test('init writes a new file or nothing: a link at the path, dangling or not, is refused and nothing goes through it (DG-34)', () => {
+  const sb = sandbox()
+  const elsewhere = join(sb.base, 'elsewhere.json')
+  symlinkSync(elsewhere, sb.env.DISCLOSEGATE_CONFIG)
+  const r = sb.run(['init'])
+  assert.equal(r.code, 2, r.out)
+  assert.match(r.stderr, /is a symbolic link — left alone/)
+  assert.equal(contents(elsewhere), null, 'nothing was written through the dangling link')
+
+  writeFileSync(elsewhere, '{}\n')
+  const again = sb.run(['init'])
+  assert.equal(again.code, 2, again.out)
+  assert.match(again.stderr, /is a symbolic link — left alone/)
+  assert.equal(contents(elsewhere), '{}\n', 'the file behind the link is untouched')
 })
 
 test('doctor: config, rules, hook and remotes', () => {
