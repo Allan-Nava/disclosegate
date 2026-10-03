@@ -5,6 +5,11 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+## [0.0.3] — 2026-10-03
+
+0.0.3 adds DG-18, DG-19 and DG-20 and moves the backlog tooling to backlogsync; 0.1.0
+still waits on the audit week (DG-14).
+
 ### Added
 - An annotated tag is read: its tagger is checked like a committer (`email`, `name`) and
   its message like a commit message (`term`, `path`, trailers), in the hook and in `scan

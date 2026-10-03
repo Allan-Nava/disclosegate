@@ -39,13 +39,13 @@
 - [x] **DG-25** — A symlinked user file can publish the private list · high · S · config, tests · `0.0.2`
 - [x] **DG-26** — A repository's own terms refuse the push that adds them · med · S · rules, tests · `0.0.2`
 - [x] **DG-27** — Release drift fails on a version that is not meant to be tagged · high · S · release · `0.0.2`
-- [x] **DG-28** — The backlog tooling is backlogsync's · med · S · project · `main`
+- [x] **DG-28** — The backlog tooling is backlogsync's · med · S · project · `0.0.3`
 
 ## v0.2.0 — What the first version does not read
 
-- [x] **DG-18** — Annotated tags · med · S · rules, hook · `main`
-- [x] **DG-19** — A merge's own changes · med · M · rules, hook · `main`
-- [x] **DG-20** — blockedDomains in text · med · S · rules · `main`
+- [x] **DG-18** — Annotated tags · med · S · rules, hook · `0.0.3`
+- [x] **DG-19** — A merge's own changes · med · M · rules, hook · `0.0.3`
+- [x] **DG-20** — blockedDomains in text · med · S · rules · `0.0.3`
 - [ ] **DG-21** — Chain a moved-aside hook · low · S · hook, enhancement
 - [ ] **DG-22** — Stream `--history` · low · S · enhancement
 - [ ] **DG-23** — The social card · low · S · docs

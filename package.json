@@ -1,6 +1,6 @@
 {
   "name": "disclosegate",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "A pre-push guard against publishing internal detail: work email addresses in commit metadata and trailers, private host, service and client names, home-directory paths and file URLs — checked before the push, because a commit on a forge stays reachable by SHA.",
   "type": "module",
   "bin": {
