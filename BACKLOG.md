@@ -8,7 +8,7 @@ it one way, on every push to `main` that touches it. Ticking an item ships it; c
 an issue on GitHub changes nothing.
 
 Labels: `rules`, `hook`, `config`, `release`, `docs`, `project`, `tests`, `enhancement`.
-A shipped item that is on `main` but in no release yet carries `ver=main`; the release
+A shipped item that is on `main` but in no release yet carries `ver=0.0.5`; the release
 that ships it turns that into its version.
 
 ## v0.0.1 — The guard, test-first <!-- ms: phase=now -->
@@ -172,7 +172,7 @@ and rates are published, the matches are not.
   `assets/social-preview.html` with headless Chrome and name it in the page's
   `og:image`. Done 2026-10-03: the PNG is committed, `site/build.mjs` names it in
   `og:image` and `twitter:image` (`summary_large_image`), CLAUDE.md has the command.
-  <!-- dg: prio=low size=S labels=docs ver=main -->
+  <!-- dg: prio=low size=S labels=docs ver=0.0.5 -->
 - [x] **DG-24 — A `pre-commit` framework definition**: `.pre-commit-hooks.yaml` with
   `stages: [pre-push]`, for repositories that manage hooks that way. Done 2026-10-03: the
   definition calls `disclosegate pre-push --pre-commit`, which reads `PRE_COMMIT_REMOTE_*`
@@ -247,7 +247,7 @@ and rates are published, the matches are not.
   `bin/lib/git.mjs` reads each changed pointer's object from the local store as the file's
   lines, on every path (push, `--range`, `--history`, `--staged`); a missing object is
   `unread`; a real git-lfs push, chained after disclosegate, uploads nothing on a refusal.
-  <!-- dg: prio=med size=M labels=rules,hook ver=main -->
+  <!-- dg: prio=med size=M labels=rules,hook ver=0.0.5 -->
 - [x] **DG-33 — A trailer that ends in a CR is not read as a trailer**: `trailers()` in
   `bin/lib/rules.mjs` takes a line as `Token: value` only when `.*$` reaches its end, and
   `.` stops at a CR, so a message kept with CRLF line endings (`git commit
@@ -259,7 +259,7 @@ and rates are published, the matches are not.
   it on a real verbatim commit. Changes findings, so it was kept out of DG-31, whose
   results had to stay byte-identical. Found during DG-31. Done: `trailerOf()` drops one
   trailing CR, tested on a real `--cleanup=verbatim` commit.
-  <!-- dg: prio=med size=S labels=rules ver=main -->
+  <!-- dg: prio=med size=S labels=rules ver=0.0.5 -->
 - [x] **DG-34 — `init` checks for the user file, then writes it**: CodeQL's
   `js/file-system-race`, alerts 2 and 3, 2026-10-03. `init` in `bin/disclosegate.mjs`
   asked `existsSync` whether the user file was there and then called `writeFileSync`,
@@ -285,4 +285,4 @@ and rates are published, the matches are not.
   Done 2026-10-03: one read for the state and the config files, an exclusive link then an
   unlink for each move, `'wx'` for a hook not read as ours; a dangling `pre-push` link is
   now refused, a symlinked hook still moves as a link (four CLI tests).
-  <!-- dg: prio=med size=S labels=hook,config ver=main -->
+  <!-- dg: prio=med size=S labels=hook,config ver=0.0.5 -->

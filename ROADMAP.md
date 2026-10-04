@@ -48,12 +48,12 @@
 - [x] **DG-20** — blockedDomains in text · med · S · rules · `0.0.3`
 - [x] **DG-21** — Chain a moved-aside hook · low · S · hook, enhancement · `0.0.4`
 - [x] **DG-22** — Stream `--history` · low · S · enhancement · `0.0.4`
-- [x] **DG-23** — The social card · low · S · docs · `main`
+- [x] **DG-23** — The social card · low · S · docs · `0.0.5`
 - [x] **DG-24** — A `pre-commit` framework definition · low · S · hook, enhancement · `0.0.4`
 - [x] **DG-29** — A control byte in a line splits the log · med · S · rules, hook · `0.0.4`
 - [x] **DG-30** — A `-diff` attribute hides a file's lines · med · S · rules, hook · `0.0.4`
 - [x] **DG-31** — A long run of letters makes the address rule quadratic · med · S · rules · `0.0.4`
-- [x] **DG-32** — Git LFS content is not read · med · M · rules, hook · `main`
-- [x] **DG-33** — A trailer that ends in a CR is not read as a trailer · med · S · rules · `main`
+- [x] **DG-32** — Git LFS content is not read · med · M · rules, hook · `0.0.5`
+- [x] **DG-33** — A trailer that ends in a CR is not read as a trailer · med · S · rules · `0.0.5`
 - [x] **DG-34** — `init` checks for the user file, then writes it · med · S · config, tests · `0.0.4`
-- [x] **DG-35** — The hook installer and the config loader still check, then use · med · S · hook, config · `main`
+- [x] **DG-35** — The hook installer and the config loader still check, then use · med · S · hook, config · `0.0.5`

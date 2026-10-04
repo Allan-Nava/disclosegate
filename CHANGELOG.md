@@ -5,6 +5,13 @@ versions follow [SemVer](https://semver.org/). Items reference their `DG-n` back
 
 ## [Unreleased]
 
+## [0.0.5] — 2026-10-04
+
+0.0.5 reads what 0.0.4 did not: Git LFS content (DG-32) and a trailer on a CRLF line
+(DG-33) — both can refuse a push 0.0.4 let through. It also replaces the remaining
+check-then-use file handling (DG-35) and adds the site's social card (DG-23); 0.1.0 still
+waits on the audit week (DG-14).
+
 ### Added
 - A file tracked by Git LFS is read as its content, not its pointer. The content is read
   from the repository's local LFS object store (or `lfs.storage`), as the file's lines,
